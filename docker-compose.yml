@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # 向量数据库 - 存储文档的语义向量，用于 RAG 检索
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  # Redis - 存储对话历史（多轮聊天记忆）和会话 token
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes  # 开启持久化，重启不丢数据
+    restart: unless-stopped
+
+  # PostgreSQL - 存储用户信息、登录凭证、知识库元数据
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ai_agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  redis_data:
+  postgres_data:

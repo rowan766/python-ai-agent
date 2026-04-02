@@ -2,16 +2,22 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import chat, rag
+from contextlib import asynccontextmanager
+from app.api import chat, rag, auth
+from app.core.database import engine, Base
 
-app = FastAPI(
-    title="Python AI Agent",
-    description="聊天工具 + 企业级 RAG",
-    version="0.1.0"
-)
+# lifespan 是新的生命周期管理方式
+# yield 之前是启动时执行的代码，yield 之后是关闭时执行的代码
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时：自动创建数据库表
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # 关闭时：可以在这里做清理工作（比如关闭数据库连接池）
 
-# 跨域配置，开发阶段允许所有来源
-# 作用：让你的前端（React/Vue）能访问这个后端接口
+app = FastAPI(title="Python AI Agent", version="0.1.0", lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 注册路由，prefix 相当于 NestJS 的 Controller 路径前缀
+app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(rag.router, prefix="/api", tags=["RAG"])
 

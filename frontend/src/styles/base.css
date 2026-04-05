@@ -1,0 +1,244 @@
+:root {
+  font-family:
+    'Avenir Next', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Segoe UI', sans-serif;
+  color: #1d2724;
+  background: #f7f2e8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --page-border: rgba(24, 54, 48, 0.08);
+  --page-card: rgba(255, 251, 243, 0.92);
+  --page-card-strong: #fffdf8;
+  --page-green: #1f6f54;
+  --page-green-deep: #183630;
+  --page-gold: #ba8a2e;
+  --page-muted: #6f7169;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(245, 221, 174, 0.6), transparent 25%),
+    linear-gradient(180deg, #fcfaf4 0%, #f4eee1 100%);
+}
+
+a {
+  color: inherit;
+}
+
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.hero-card,
+.soft-card,
+.metric-card {
+  border: 1px solid var(--page-border);
+  border-radius: 26px;
+  background: var(--page-card);
+  box-shadow: 0 18px 40px rgba(23, 49, 44, 0.08);
+}
+
+.hero-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px;
+  background:
+    radial-gradient(circle at right top, rgba(186, 138, 46, 0.16), transparent 22%),
+    linear-gradient(180deg, rgba(255, 251, 243, 0.98), rgba(248, 242, 230, 0.98));
+}
+
+.hero-card__summary {
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(31, 111, 84, 0.15);
+  border-radius: 20px;
+  padding: 16px 18px;
+  background: rgba(31, 111, 84, 0.06);
+  color: var(--page-green-deep);
+}
+
+.hero-card__summary span {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.hero-card__summary small {
+  color: var(--page-muted);
+}
+
+.page-eyebrow {
+  margin: 0 0 14px;
+  color: var(--page-gold);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.page h2 {
+  margin: 0;
+  color: var(--page-green-deep);
+  font-size: clamp(28px, 3.2vw, 42px);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.page-copy {
+  max-width: 820px;
+  margin: 16px 0 0;
+  color: var(--page-muted);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.metric-card {
+  padding: 22px;
+}
+
+.metric-card__label {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--page-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  display: block;
+  color: var(--page-green-deep);
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+.metric-card p {
+  margin: 12px 0 0;
+  color: var(--page-muted);
+  line-height: 1.7;
+}
+
+.grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.soft-card {
+  padding: 6px;
+}
+
+.action-grid,
+.roadmap-boxes {
+  display: grid;
+  gap: 14px;
+}
+
+.action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.action-tile,
+.roadmap-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid rgba(24, 54, 48, 0.1);
+  border-radius: 20px;
+  padding: 18px;
+  background: var(--page-card-strong);
+  text-decoration: none;
+}
+
+.action-tile strong,
+.roadmap-box strong {
+  color: var(--page-green-deep);
+  font-size: 16px;
+}
+
+.action-tile span,
+.roadmap-box span,
+.check-list li,
+.muted,
+.health-row {
+  color: var(--page-muted);
+  line-height: 1.7;
+}
+
+.check-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.check-list li + li {
+  margin-top: 8px;
+}
+
+.health-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.format-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ml-12 {
+  margin-left: 12px;
+}
+
+@media (max-width: 1200px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-card {
+    flex-direction: column;
+    padding: 22px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}

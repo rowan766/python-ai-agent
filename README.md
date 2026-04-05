@@ -95,7 +95,7 @@ docker compose up -d
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-访问 `http://localhost:8000/docs` 查看 API 文档。
+访问 `http://localhost:8000/docs` 查看 Scalar 风格的 API 文档。
 
 ---
 

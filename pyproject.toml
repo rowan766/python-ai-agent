@@ -24,6 +24,7 @@ dependencies = [
     "qdrant-client>=1.17.1",
     "rank-bm25>=0.2.2",
     "redis>=7.4.0",
+    "scalar-fastapi>=1.8.0",
     "sqlalchemy[asyncio]>=2.0.48",
     "unstructured>=0.22.10",
     "uvicorn>=0.42.0",

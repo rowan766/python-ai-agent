@@ -8,7 +8,11 @@ import json
 
 router = APIRouter()
 
-@router.post("/chat")
+@router.post(
+    "/chat",
+    summary="流式聊天 Chat",
+    description="发送聊天消息并通过 SSE 返回流式结果。 Send chat messages and receive a streaming SSE response.",
+)
 async def chat(request: ChatRequest):
     """
     流式聊天接口

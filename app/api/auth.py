@@ -44,7 +44,12 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
-@router.post("/auth/register", response_model=TokenResponse)
+@router.post(
+    "/auth/register",
+    response_model=TokenResponse,
+    summary="用户注册 Register",
+    description="注册新用户并返回访问令牌。 Register a new user and return an access token.",
+)
 async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """注册新用户"""
     # 检查邮箱是否已注册
@@ -66,7 +71,12 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
     token = create_access_token({"sub": str(user.id), "email": user.email})
     return {"access_token": token}
 
-@router.post("/auth/login", response_model=TokenResponse)
+@router.post(
+    "/auth/login",
+    response_model=TokenResponse,
+    summary="用户登录 Login",
+    description="使用邮箱和密码登录并返回访问令牌。 Log in with email and password and return an access token.",
+)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     """用户登录"""
     result = await db.execute(select(User).where(User.email == request.email))
@@ -78,7 +88,11 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     token = create_access_token({"sub": str(user.id), "email": user.email})
     return {"access_token": token}
 
-@router.get("/auth/me")
+@router.get(
+    "/auth/me",
+    summary="当前用户 Me",
+    description="获取当前登录用户的信息。 Get the currently authenticated user's profile.",
+)
 async def get_me(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)

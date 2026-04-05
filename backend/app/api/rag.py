@@ -23,7 +23,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.post(
     "/rag/upload",
-    summary="上传文档 Upload",
+    summary="上传文档",
     description="上传文件并完成解析、切分、向量化与入库。 Upload a file, then parse, chunk, embed, and index it.",
 )
 async def upload_and_index(file: UploadFile = File(...)):
@@ -67,7 +67,7 @@ async def upload_and_index(file: UploadFile = File(...)):
 
 @router.post(
     "/rag/query",
-    summary="知识库检索 Query",
+    summary="知识库检索",
     description="输入问题后返回当前用户有权限访问的知识库结果片段。 Query accessible knowledge chunks within the current user's scope.",
 )
 async def rag_query(
@@ -117,7 +117,7 @@ async def rag_query(
 
 @router.get(
     "/rag/supported-formats",
-    summary="支持格式 Supported Formats",
+    summary="支持格式",
     description="返回当前支持上传和解析的文件格式。 Return the file formats currently supported for upload and parsing.",
 )
 async def supported_formats():
@@ -127,7 +127,7 @@ async def supported_formats():
 
 @router.get(
     "/rag/debug/embedding",
-    summary="Embedding 健康检查 Embedding Health Check",
+    summary="Embedding 健康检查",
     description="检查当前 embedding 模型是否可用，并返回模型名、Base URL、向量维度和调用状态。 Check embedding availability and return model, base URL, vector dimensions, and status.",
 )
 async def embedding_health_check(
@@ -169,7 +169,7 @@ async def embedding_health_check(
 
 @router.get(
     "/rag/debug/chat",
-    summary="聊天模型健康检查 Chat Model Health Check",
+    summary="聊天模型健康检查",
     description="检查当前聊天模型是否可用，并返回模型名、Base URL、首段回复和调用状态。 Check chat model availability and return model, base URL, first response text, and status.",
 )
 async def chat_health_check(

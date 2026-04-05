@@ -12,11 +12,11 @@ from app.core.database import engine, Base
 
 logger = logging.getLogger("uvicorn.error")
 
-TAG_AUTH = "认证 Auth"
-TAG_CHAT = "聊天 Chat"
-TAG_RAG = "知识库 RAG"
-TAG_ORG = "组织 Organization"
-TAG_KB = "知识空间 Knowledge"
+TAG_AUTH = "认证"
+TAG_CHAT = "聊天"
+TAG_RAG = "知识库"
+TAG_ORG = "组织"
+TAG_KB = "知识空间"
 
 OPENAPI_TAGS = [
     {

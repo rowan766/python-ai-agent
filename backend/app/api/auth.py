@@ -47,7 +47,7 @@ class TokenResponse(BaseModel):
 @router.post(
     "/auth/register",
     response_model=TokenResponse,
-    summary="用户注册 Register",
+    summary="用户注册",
     description="注册新用户并返回访问令牌。 Register a new user and return an access token.",
 )
 async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
@@ -74,7 +74,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 @router.post(
     "/auth/login",
     response_model=TokenResponse,
-    summary="用户登录 Login",
+    summary="用户登录",
     description="使用邮箱和密码登录并返回访问令牌。 Log in with email and password and return an access token.",
 )
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
@@ -90,7 +90,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get(
     "/auth/me",
-    summary="当前用户 Me",
+    summary="当前用户",
     description="获取当前登录用户的信息。 Get the currently authenticated user's profile.",
 )
 async def get_me(

@@ -133,7 +133,7 @@ def serialize_share_request_row(
 
 @router.get(
     "/knowledge-bases",
-    summary="知识库空间列表 List Knowledge Bases",
+    summary="知识库空间列表",
     description="列出当前用户可访问的知识库空间。 List accessible knowledge base spaces for the current user.",
 )
 async def list_knowledge_bases(
@@ -201,7 +201,7 @@ async def list_knowledge_bases(
 
 @router.post(
     "/knowledge-bases",
-    summary="创建知识库空间 Create Knowledge Base",
+    summary="创建知识库空间",
     description="创建归属某个部门的知识库空间。 Create a knowledge base space owned by a department.",
 )
 async def create_knowledge_base(
@@ -256,7 +256,7 @@ async def create_knowledge_base(
 
 @router.get(
     "/documents",
-    summary="文档列表 List Documents",
+    summary="文档列表",
     description="列出当前用户可访问的知识库文档。 List accessible knowledge documents for the current user.",
 )
 async def list_documents(
@@ -319,7 +319,7 @@ async def list_documents(
 
 @router.get(
     "/knowledge-bases/{knowledge_base_id}/shares",
-    summary="知识库共享列表 List Knowledge Base Shares",
+    summary="知识库共享列表",
     description="查看指定知识库空间当前已生效的共享目标部门。 List active share targets for a knowledge base.",
 )
 async def list_knowledge_base_shares(
@@ -358,7 +358,7 @@ async def list_knowledge_base_shares(
 
 @router.post(
     "/knowledge-bases/{knowledge_base_id}/share-requests",
-    summary="申请共享知识库 Request Knowledge Base Share",
+    summary="申请共享知识库",
     description="为指定知识库空间发起共享申请，目标部门负责人审批通过后生效。 Request to share a knowledge base with another department.",
 )
 async def create_knowledge_base_share_request(
@@ -445,7 +445,7 @@ async def create_knowledge_base_share_request(
 
 @router.get(
     "/knowledge-bases/share-requests/my",
-    summary="我的知识库共享申请 My Knowledge Base Share Requests",
+    summary="我的知识库共享申请",
     description="查看当前用户发起的知识库共享申请。 List knowledge base share requests created by the current user.",
 )
 async def list_my_knowledge_base_share_requests(
@@ -492,7 +492,7 @@ async def list_my_knowledge_base_share_requests(
 
 @router.get(
     "/knowledge-bases/share-requests/pending",
-    summary="待审批知识库共享申请 Pending Knowledge Base Share Requests",
+    summary="待审批知识库共享申请",
     description="查看当前用户可以审批的知识库共享申请。 List pending knowledge base share requests reviewable by the current user.",
 )
 async def list_pending_knowledge_base_share_requests(
@@ -556,7 +556,7 @@ async def _get_share_request_or_404(db: AsyncSession, request_id: int) -> Knowle
 
 @router.post(
     "/knowledge-bases/share-requests/{request_id}/approve",
-    summary="通过知识库共享申请 Approve Knowledge Base Share Request",
+    summary="通过知识库共享申请",
     description="审批通过知识库共享申请并创建生效的共享关系。 Approve a knowledge base share request and activate the share.",
 )
 async def approve_knowledge_base_share_request(
@@ -607,7 +607,7 @@ async def approve_knowledge_base_share_request(
 
 @router.post(
     "/knowledge-bases/share-requests/{request_id}/reject",
-    summary="驳回知识库共享申请 Reject Knowledge Base Share Request",
+    summary="驳回知识库共享申请",
     description="驳回知识库共享申请。 Reject a knowledge base share request.",
 )
 async def reject_knowledge_base_share_request(
@@ -634,7 +634,7 @@ async def reject_knowledge_base_share_request(
 
 @router.post(
     "/documents/upload",
-    summary="上传知识文档 Upload Knowledge Document",
+    summary="上传知识文档",
     description="上传文档到指定知识库空间，并完成解析、切片、向量化与入库。 Upload a document into a knowledge base, then parse, chunk, embed, and index it.",
 )
 async def upload_document_to_knowledge_base(

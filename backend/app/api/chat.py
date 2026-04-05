@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.post(
     "/chat",
-    summary="流式聊天 Chat",
+    summary="流式聊天",
     description="发送聊天消息并通过 SSE 返回流式结果。 Send chat messages and receive a streaming SSE response.",
 )
 async def chat(request: ChatRequest):

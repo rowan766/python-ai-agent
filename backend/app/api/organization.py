@@ -179,7 +179,7 @@ def get_department_descendant_ids(
 
 @router.get(
     "/departments/tree",
-    summary="部门树 Department Tree",
+    summary="部门树",
     description="获取当前系统中的部门树结构。 Return the department tree in the system.",
 )
 async def get_department_tree(
@@ -196,7 +196,7 @@ async def get_department_tree(
 
 @router.post(
     "/departments/bootstrap",
-    summary="初始化首个部门 Bootstrap First Department",
+    summary="初始化首个部门",
     description="当系统中还没有任何部门时，创建首个根部门并将当前用户设为负责人。 Bootstrap the first department when the system is empty.",
 )
 async def bootstrap_first_department(
@@ -250,7 +250,7 @@ async def bootstrap_first_department(
 
 @router.post(
     "/departments",
-    summary="创建部门 Create Department",
+    summary="创建部门",
     description="创建新的部门节点，用于维护组织树。 Create a department node for organization tree management.",
 )
 async def create_department(
@@ -337,7 +337,7 @@ async def create_department(
 
 @router.patch(
     "/departments/{department_id}",
-    summary="更新部门 Update Department",
+    summary="更新部门",
     description="更新部门的基本信息和状态。 Update basic department information and status.",
 )
 async def update_department(
@@ -388,7 +388,7 @@ async def update_department(
 
 @router.get(
     "/departments/{department_id}/members",
-    summary="部门成员 Department Members",
+    summary="部门成员",
     description="查看指定部门的有效成员列表。 List active members of a department.",
 )
 async def get_department_members(
@@ -432,7 +432,7 @@ async def get_department_members(
 
 @router.get(
     "/departments/{department_id}/impact",
-    summary="部门影响评估 Department Impact",
+    summary="部门影响评估",
     description="查看部门停用或调整前的影响范围。 Preview the impact of changing or disabling a department.",
 )
 async def get_department_impact(
@@ -485,7 +485,7 @@ async def get_department_impact(
 
 @router.patch(
     "/departments/{department_id}/manager",
-    summary="设置部门负责人 Assign Department Manager",
+    summary="设置部门负责人",
     description="为部门指定负责人，负责人必须是该部门的有效成员。 Assign a manager for the department.",
 )
 async def update_department_manager(
@@ -533,7 +533,7 @@ async def update_department_manager(
 
 @router.patch(
     "/departments/{department_id}/parent",
-    summary="调整部门层级 Move Department",
+    summary="调整部门层级",
     description="调整部门在组织树中的上级节点。 Move a department under another parent department.",
 )
 async def update_department_parent(
@@ -581,7 +581,7 @@ async def update_department_parent(
 
 @router.post(
     "/department-requests",
-    summary="申请加入部门 Create Department Join Request",
+    summary="申请加入部门",
     description="当前用户发起加入部门申请。 Create a department join request for the current user.",
 )
 async def create_department_join_request(
@@ -648,7 +648,7 @@ async def create_department_join_request(
 
 @router.get(
     "/department-requests/my",
-    summary="我的部门申请 My Department Join Requests",
+    summary="我的部门申请",
     description="查看当前用户发起的部门加入申请。 List department join requests created by the current user.",
 )
 async def get_my_department_join_requests(
@@ -683,7 +683,7 @@ async def get_my_department_join_requests(
 
 @router.get(
     "/department-requests/pending",
-    summary="待审批部门申请 Pending Department Join Requests",
+    summary="待审批部门申请",
     description="查看当前用户可审批的部门加入申请。 List pending department join requests reviewable by the current user.",
 )
 async def get_pending_department_join_requests(
@@ -736,7 +736,7 @@ async def get_pending_department_join_requests(
 
 @router.post(
     "/department-requests/{request_id}/approve",
-    summary="通过部门申请 Approve Department Join Request",
+    summary="通过部门申请",
     description="审批通过部门加入申请，并创建有效成员关系。 Approve a department join request and create the membership.",
 )
 async def approve_department_join_request(
@@ -808,7 +808,7 @@ async def approve_department_join_request(
 
 @router.post(
     "/department-requests/{request_id}/reject",
-    summary="驳回部门申请 Reject Department Join Request",
+    summary="驳回部门申请",
     description="驳回部门加入申请。 Reject a department join request.",
 )
 async def reject_department_join_request(

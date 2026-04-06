@@ -65,6 +65,11 @@ export async function updateDepartmentParent(
   return data
 }
 
+export async function deleteDepartment(departmentId: number) {
+  const { data } = await http.delete(`/api/departments/${departmentId}`)
+  return data
+}
+
 export async function createDepartmentJoinRequest(payload: DepartmentJoinRequestPayload) {
   const { data } = await http.post('/api/department-requests', payload)
   return data

@@ -10,7 +10,12 @@ from app.api.deps import get_current_user, is_platform_admin
 from app.core.access import can_manage_department, expand_department_descendants
 from app.core.database import get_db
 from app.models.department import Department, DepartmentJoinRequest, DepartmentMembership
-from app.models.knowledge import KnowledgeBase, KnowledgeDocument
+from app.models.knowledge import (
+    KnowledgeBase,
+    KnowledgeBaseShare,
+    KnowledgeBaseShareRequest,
+    KnowledgeDocument,
+)
 from app.models.user import User
 
 router = APIRouter()
@@ -473,6 +478,28 @@ async def get_department_impact(
             )
         )
     )
+    active_share_count_result = await db.execute(
+        select(func.count(KnowledgeBaseShare.id)).where(
+            and_(
+                or_(
+                    KnowledgeBaseShare.source_department_id == department_id,
+                    KnowledgeBaseShare.target_department_id == department_id,
+                ),
+                KnowledgeBaseShare.status == "active",
+            )
+        )
+    )
+    pending_share_request_count_result = await db.execute(
+        select(func.count(KnowledgeBaseShareRequest.id)).where(
+            and_(
+                or_(
+                    KnowledgeBaseShareRequest.source_department_id == department_id,
+                    KnowledgeBaseShareRequest.target_department_id == department_id,
+                ),
+                KnowledgeBaseShareRequest.status == "pending",
+            )
+        )
+    )
 
     return {
         "department_id": department_id,
@@ -480,6 +507,8 @@ async def get_department_impact(
         "active_member_count": member_count_result.scalar_one(),
         "knowledge_base_count": knowledge_base_count_result.scalar_one(),
         "document_count": document_count_result.scalar_one(),
+        "active_share_count": active_share_count_result.scalar_one(),
+        "pending_share_request_count": pending_share_request_count_result.scalar_one(),
     }
 
 
@@ -576,6 +605,66 @@ async def update_department_parent(
             "id": department.id,
             "parent_id": department.parent_id,
         },
+    }
+
+
+@router.delete(
+    "/departments/{department_id}",
+    summary="删除部门",
+    description="删除一个没有下级部门和知识资产占用的部门节点。 Delete a department node when it has no child departments or knowledge assets.",
+)
+async def delete_department(
+    department_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    department = await ensure_department_manager_access(
+        db=db,
+        department_id=department_id,
+        current_user=current_user,
+    )
+
+    impact = await get_department_impact(
+        department_id=department_id,
+        db=db,
+        current_user=current_user,
+    )
+
+    blockers = {
+        "child_department_count": impact["child_department_count"],
+        "knowledge_base_count": impact["knowledge_base_count"],
+        "document_count": impact["document_count"],
+        "active_share_count": impact["active_share_count"],
+        "pending_share_request_count": impact["pending_share_request_count"],
+    }
+    active_blockers = {key: value for key, value in blockers.items() if value > 0}
+    if active_blockers:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "当前部门下仍有关联结构或知识资产，暂不能删除",
+                "impact": impact,
+            },
+        )
+
+    membership_result = await db.execute(
+        select(DepartmentMembership).where(DepartmentMembership.department_id == department_id)
+    )
+    for membership in membership_result.scalars().all():
+        await db.delete(membership)
+
+    join_request_result = await db.execute(
+        select(DepartmentJoinRequest).where(DepartmentJoinRequest.target_department_id == department_id)
+    )
+    for join_request in join_request_result.scalars().all():
+        await db.delete(join_request)
+
+    await db.delete(department)
+    await db.commit()
+
+    return {
+        "status": "success",
+        "message": f"部门 {department.name} 已删除",
     }
 
 

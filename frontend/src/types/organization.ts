@@ -54,6 +54,8 @@ export interface DepartmentImpact {
   active_member_count: number
   knowledge_base_count: number
   document_count: number
+  active_share_count: number
+  pending_share_request_count: number
 }
 
 export interface DepartmentManagerUpdatePayload {

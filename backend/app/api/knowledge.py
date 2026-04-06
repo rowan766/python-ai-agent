@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,13 +14,15 @@ from sqlalchemy.orm import aliased
 
 from app.api.deps import get_current_user, is_platform_admin
 from app.core.access import (
+    expand_department_descendants,
     can_manage_department,
     get_accessible_department_ids,
     get_accessible_knowledge_base_ids,
+    get_managed_department_ids,
 )
 from app.core.database import get_db
 from app.core.paths import UPLOAD_DIR
-from app.core.rag.indexer import index_documents
+from app.core.rag.indexer import delete_document_vectors, index_documents
 from app.core.rag.loader import load_documents
 from app.models.department import Department
 from app.models.knowledge import (
@@ -83,6 +85,11 @@ class KnowledgeBaseShareDecisionRequest(BaseModel):
 def normalize_code(raw_value: str) -> str:
     code = re.sub(r"[^a-z0-9]+", "-", raw_value.strip().lower())
     return code.strip("-")
+
+
+def build_document_storage_path(document_id: int, file_extension: str) -> Path:
+    normalized_extension = file_extension if file_extension.startswith(".") else f".{file_extension}"
+    return UPLOAD_DIR / f"knowledge_document_{document_id}{normalized_extension.lower()}"
 
 
 def serialize_knowledge_base_row(
@@ -269,6 +276,19 @@ async def list_documents(
     accessible_knowledge_base_ids = await get_accessible_knowledge_base_ids(db, current_user)
     if not accessible_knowledge_base_ids:
         return {"items": [], "count": 0}
+    manageable_department_ids: set[int] = set()
+    if not is_platform_admin(current_user):
+        managed_root_ids = await get_managed_department_ids(db, current_user.id)
+        if managed_root_ids:
+            departments_result = await db.execute(
+                select(Department).where(Department.status == "active").order_by(Department.id.asc())
+            )
+            manageable_department_ids = set(
+                expand_department_descendants(
+                    list(departments_result.scalars().all()),
+                    managed_root_ids,
+                )
+            )
 
     if department_id is not None and department_id not in accessible_department_ids:
         raise HTTPException(status_code=403, detail="你没有查看该部门文档的权限")
@@ -308,6 +328,10 @@ async def list_documents(
             "visibility_scope": document.visibility_scope,
             "status": document.status,
             "chunks_count": document.chunks_count,
+            "download_available": build_document_storage_path(document.id, document.file_extension).exists(),
+            "can_delete": is_platform_admin(current_user)
+            or uploader.id == current_user.id
+            or department.id in manageable_department_ids,
             "uploader_user_id": uploader.id,
             "uploader_username": uploader.username,
             "created_at": document.created_at,
@@ -315,6 +339,91 @@ async def list_documents(
         for document, knowledge_base, department, uploader in rows
     ]
     return {"items": items, "count": len(items)}
+
+
+@router.get(
+    "/documents/{document_id}/download",
+    summary="下载文档",
+    description="下载当前用户有权限访问的原始文档文件。 Download the original file for an accessible knowledge document.",
+)
+async def download_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    accessible_knowledge_base_ids = await get_accessible_knowledge_base_ids(db, current_user)
+    result = await db.execute(
+        select(KnowledgeDocument)
+        .where(
+            and_(
+                KnowledgeDocument.id == document_id,
+                KnowledgeDocument.status == "active",
+                KnowledgeDocument.knowledge_base_id.in_(accessible_knowledge_base_ids),
+            )
+        )
+    )
+    document = result.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="文档不存在或你没有下载权限")
+
+    file_path = build_document_storage_path(document.id, document.file_extension)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="原始文档文件不存在，可能是历史数据尚未保留源文件")
+
+    return FileResponse(
+        path=file_path,
+        filename=document.filename,
+        media_type="application/octet-stream",
+    )
+
+
+@router.delete(
+    "/documents/{document_id}",
+    summary="删除文档",
+    description="删除文档业务记录、源文件以及向量库中的所有切片。 Delete a knowledge document, its stored file, and all related vector chunks.",
+)
+async def delete_document(
+    document_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(KnowledgeDocument, Department)
+        .join(Department, Department.id == KnowledgeDocument.department_id)
+        .where(
+            and_(
+                KnowledgeDocument.id == document_id,
+                KnowledgeDocument.status == "active",
+            )
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="文档不存在或已删除")
+
+    document, department = row
+    can_delete_document = (
+        is_platform_admin(current_user)
+        or document.uploader_user_id == current_user.id
+        or await can_manage_department(db, current_user, department.id)
+    )
+    if not can_delete_document:
+        raise HTTPException(status_code=403, detail="仅上传人、部门负责人或平台管理员可以删除文档")
+
+    file_path = build_document_storage_path(document.id, document.file_extension)
+
+    try:
+        delete_document_vectors(document.id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"删除向量库文档失败: {exc}")
+
+    await db.delete(document)
+    await db.commit()
+
+    if file_path.exists():
+        file_path.unlink()
+
+    return {"status": "success", "message": f"文档 {document.filename} 已删除"}
 
 
 @router.get(
@@ -672,14 +781,13 @@ async def upload_document_to_knowledge_base(
         raise HTTPException(status_code=400, detail="文档可见性配置无效")
 
     source_path = Path(file.filename)
-    stored_filename = f"{uuid4().hex}_{source_path.name}"
-    file_path = UPLOAD_DIR / stored_filename
+    temp_file_path = UPLOAD_DIR / f"{uuid4().hex}_{source_path.name}"
 
-    with open(file_path, "wb") as buffer:
+    with open(temp_file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     try:
-        docs = load_documents(str(file_path))
+        docs = load_documents(str(temp_file_path))
         if not docs:
             raise HTTPException(
                 status_code=400,
@@ -699,6 +807,10 @@ async def upload_document_to_knowledge_base(
         )
         db.add(document)
         await db.flush()
+        final_file_path = build_document_storage_path(document.id, source_path.suffix.lower())
+        if final_file_path.exists():
+            final_file_path.unlink()
+        shutil.move(str(temp_file_path), str(final_file_path))
 
         chunk_count = index_documents(
             docs,
@@ -724,8 +836,8 @@ async def upload_document_to_knowledge_base(
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        if file_path.exists():
-            file_path.unlink()
+        if temp_file_path.exists():
+            temp_file_path.unlink()
 
     return JSONResponse(
         content=jsonable_encoder(

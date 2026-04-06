@@ -34,6 +34,10 @@ export const useAuthStore = defineStore('auth', {
       this.token = getAccessToken()
       this.initialized = true
     },
+    applyUser(user: AuthUser) {
+      this.user = user
+      this.organizationStatus = user.organization_status
+    },
     persistToken(token: string) {
       this.token = token
       setAccessToken(token)
@@ -50,7 +54,7 @@ export const useAuthStore = defineStore('auth', {
       }
 
       if (this.token && !this.user) {
-        await this.fetchCurrentUser()
+        await this.verifySession()
       }
     },
     async login(payload: LoginPayload) {
@@ -73,10 +77,14 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false
       }
     },
+    async verifySession(): Promise<AuthUser> {
+      const session = await authApi.verifySession()
+      this.applyUser(session.user)
+      return session.user
+    },
     async fetchCurrentUser(): Promise<AuthUser> {
       const user = await authApi.fetchCurrentUser()
-      this.user = user
-      this.organizationStatus = user.organization_status
+      this.applyUser(user)
       return user
     },
     logout() {

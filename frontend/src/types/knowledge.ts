@@ -37,6 +37,8 @@ export interface KnowledgeDocumentItem {
   visibility_scope: string
   status: string
   chunks_count: number
+  download_available: boolean
+  can_delete: boolean
   uploader_user_id: number
   uploader_username: string
   created_at: string

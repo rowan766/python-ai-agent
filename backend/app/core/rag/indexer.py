@@ -1,7 +1,9 @@
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct
 import os
 from uuid import uuid4
+
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, FieldCondition, Filter, FilterSelector, MatchValue, PointStruct, VectorParams
+
 from app.core.embeddings import embed_texts
 from app.core.paths import ensure_env_loaded
 
@@ -71,3 +73,24 @@ def index_documents(
 
     client.upsert(collection_name=collection_name, points=points)
     return len(points)
+
+
+def delete_document_vectors(
+    document_id: int,
+    collection_name: str = COLLECTION_NAME,
+) -> None:
+    ensure_collection()
+    client.delete(
+        collection_name=collection_name,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_id",
+                        match=MatchValue(value=document_id),
+                    )
+                ]
+            )
+        ),
+        wait=True,
+    )

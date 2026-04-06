@@ -1,9 +1,12 @@
 # 密码哈希、JWT 生成和验证，相当于 NestJS 的 AuthService。
 
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
 import os
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
 from app.core.paths import ensure_env_loaded
 
 ensure_env_loaded()
@@ -25,14 +28,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证明文密码和哈希密码是否匹配"""
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict[str, Any]) -> str:
     """生成 JWT token"""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=JWT_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=JWT_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "iat": now})
     return jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> dict[str, Any] | None:
     """解码并验证 JWT token"""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])

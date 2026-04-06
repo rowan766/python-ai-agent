@@ -29,22 +29,30 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '工作台', navKey: '/workspace', requiresAuth: true },
       },
       {
+        path: 'organization',
+        name: 'organization',
+        component: () => import('@/views/organization/OrganizationCenterView.vue'),
+        meta: { title: '组织中心', navKey: '/organization', requiresAuth: true },
+      },
+      {
         path: 'onboarding',
-        name: 'onboarding',
-        component: () => import('@/views/OnboardingView.vue'),
-        meta: { title: '组织接入', navKey: '/onboarding', requiresAuth: true },
+        redirect: {
+          name: 'organization',
+          query: { tab: 'access' },
+        },
       },
       {
         path: 'departments',
         name: 'departments',
         component: () => import('@/views/organization/DepartmentManagementView.vue'),
-        meta: { title: '部门治理', navKey: '/departments', requiresAuth: true },
+        meta: { title: '部门治理', navKey: '/organization', requiresAuth: true },
       },
       {
         path: 'knowledge-bases',
-        name: 'knowledge-bases',
-        component: () => import('@/views/knowledge/KnowledgeBaseListView.vue'),
-        meta: { title: '知识库空间', navKey: '/knowledge-bases', requiresAuth: true },
+        redirect: {
+          name: 'documents',
+          query: { tab: 'bases' },
+        },
       },
       {
         path: 'documents',
@@ -54,21 +62,23 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'documents/upload',
-        name: 'documents-upload',
-        component: () => import('@/views/documents/DocumentUploadView.vue'),
-        meta: { title: '上传文档', navKey: '/documents/upload', requiresAuth: true },
+        redirect: {
+          name: 'documents',
+          query: { tab: 'upload' },
+        },
       },
       {
         path: 'rag/search',
         name: 'rag-search',
         component: () => import('@/views/rag/RagSearchView.vue'),
-        meta: { title: '智能检索', navKey: '/rag/search', requiresAuth: true },
+        meta: { title: '智能问答', navKey: '/rag/search', requiresAuth: true },
       },
       {
         path: 'approvals',
-        name: 'approvals',
-        component: () => import('@/views/approvals/ApprovalCenterView.vue'),
-        meta: { title: '审批中心', navKey: '/approvals', requiresAuth: true },
+        redirect: {
+          name: 'organization',
+          query: { tab: 'approvals' },
+        },
       },
     ],
   },

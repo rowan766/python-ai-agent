@@ -17,6 +17,17 @@ export interface SearchResponse {
   count: number
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface ChatStreamPayload {
+  messages: ChatMessage[]
+  model?: string
+  stream?: boolean
+}
+
 export interface SupportedFormatsResponse {
   supported_formats: string[]
 }

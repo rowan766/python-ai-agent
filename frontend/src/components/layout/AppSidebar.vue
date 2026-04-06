@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import {
-  CollectionTag,
-  Connection,
   Document,
   Files,
   HomeFilled,
   OfficeBuilding,
-  UploadFilled,
 } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -15,20 +12,16 @@ interface MenuItem {
   label: string
   path: string
   icon: unknown
-  caption: string
 }
 
 const route = useRoute()
 const router = useRouter()
 
 const menuItems: MenuItem[] = [
-  { label: '工作台', path: '/workspace', icon: HomeFilled, caption: '系统概览与快捷入口' },
-  { label: '组织接入', path: '/onboarding', icon: Connection, caption: '组织归属、申请与审批' },
-  { label: '部门治理', path: '/departments', icon: OfficeBuilding, caption: '创建部门并维护组织树' },
-  { label: '知识库空间', path: '/knowledge-bases', icon: CollectionTag, caption: '部门归属的真实空间清单' },
-  { label: '文档中心', path: '/documents', icon: Files, caption: '文档归属、切片与治理状态' },
-  { label: '上传文档', path: '/documents/upload', icon: UploadFilled, caption: '按知识库空间归属上传' },
-  { label: '智能检索', path: '/rag/search', icon: Document, caption: '按权限范围检索知识内容' },
+  { label: '工作台', path: '/workspace', icon: HomeFilled },
+  { label: '智能问答', path: '/rag/search', icon: Document },
+  { label: '文档中心', path: '/documents', icon: Files },
+  { label: '组织中心', path: '/organization', icon: OfficeBuilding },
 ]
 
 const activePath = computed(() => String(route.meta.navKey ?? route.path))
@@ -41,11 +34,8 @@ function handleSelect(path: string) {
 <template>
   <aside class="sidebar">
     <div class="sidebar__brand">
-      <div class="sidebar__mark">ER</div>
-      <div>
-        <div class="sidebar__title">Enterprise RAG</div>
-        <div class="sidebar__subtitle">Vue + FastAPI Phase 1</div>
-      </div>
+      <div class="sidebar__mark">AI</div>
+      <div class="sidebar__title">知识平台</div>
     </div>
 
     <el-menu
@@ -55,17 +45,9 @@ function handleSelect(path: string) {
     >
       <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
         <el-icon><component :is="item.icon" /></el-icon>
-        <div class="sidebar__menu-copy">
-          <span>{{ item.label }}</span>
-          <small>{{ item.caption }}</small>
-        </div>
+        <span class="sidebar__label">{{ item.label }}</span>
       </el-menu-item>
     </el-menu>
-
-    <div class="sidebar__footer">
-      <span>当前阶段</span>
-      <strong>组织接入 + 知识归属主链</strong>
-    </div>
   </aside>
 </template>
 
@@ -74,42 +56,39 @@ function handleSelect(path: string) {
   display: flex;
   height: 100%;
   flex-direction: column;
-  gap: 18px;
-  padding: 24px 18px 20px;
+  gap: 20px;
+  padding: 20px 14px;
   background:
-    linear-gradient(180deg, rgba(18, 90, 72, 0.94), rgba(14, 41, 36, 0.98)),
-    radial-gradient(circle at top, rgba(241, 198, 111, 0.22), transparent 35%);
-  color: #f7f2e8;
+    radial-gradient(circle at top, rgba(240, 198, 112, 0.18), transparent 34%),
+    linear-gradient(180deg, #1b6b56 0%, #123e35 58%, #102c27 100%);
+  color: #f6f1e8;
 }
 
 .sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  padding: 4px 8px 10px;
 }
 
 .sidebar__mark {
   display: grid;
-  height: 46px;
-  width: 46px;
+  height: 40px;
+  width: 40px;
   place-items: center;
-  border-radius: 15px;
-  background: rgba(245, 224, 188, 0.18);
-  color: #f9e8b9;
-  font-size: 16px;
+  border-radius: 12px;
+  background: rgba(255, 248, 232, 0.14);
+  color: #fff6dd;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.08em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .sidebar__title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-}
-
-.sidebar__subtitle {
-  margin-top: 4px;
-  color: rgba(247, 242, 232, 0.72);
-  font-size: 12px;
+  color: #fffaf0;
 }
 
 .sidebar__menu {
@@ -119,53 +98,29 @@ function handleSelect(path: string) {
 
 :deep(.sidebar__menu .el-menu-item) {
   height: auto;
-  min-height: 58px;
+  min-height: 48px;
   margin-bottom: 8px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(247, 242, 232, 0.92);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(246, 241, 232, 0.94);
   line-height: 1.3;
   padding-top: 10px;
   padding-bottom: 10px;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 :deep(.sidebar__menu .el-menu-item.is-active) {
-  background: rgba(246, 232, 201, 0.16);
-  color: #fff9ec;
+  background: rgba(255, 248, 232, 0.16);
+  color: #fffdf7;
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.08);
 }
 
 :deep(.sidebar__menu .el-menu-item:hover) {
   background: rgba(255, 255, 255, 0.1);
+  transform: translateX(2px);
 }
 
-.sidebar__menu-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.sidebar__menu-copy small {
-  color: rgba(247, 242, 232, 0.68);
-  font-size: 11px;
-}
-
-.sidebar__footer {
-  margin-top: auto;
-  border: 1px solid rgba(255, 248, 229, 0.12);
-  border-radius: 18px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.sidebar__footer span {
-  display: block;
-  margin-bottom: 6px;
-  color: rgba(247, 242, 232, 0.68);
-  font-size: 12px;
-}
-
-.sidebar__footer strong {
+.sidebar__label {
   font-size: 14px;
-  font-weight: 600;
 }
 </style>

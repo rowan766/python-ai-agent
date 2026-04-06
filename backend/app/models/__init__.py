@@ -5,6 +5,7 @@ from app.models.knowledge import (
     KnowledgeBaseShareRequest,
     KnowledgeDocument,
 )
+from app.models.password_reset import PasswordResetCode
 from app.models.user import User
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "KnowledgeBaseShare",
     "KnowledgeBaseShareRequest",
     "KnowledgeDocument",
+    "PasswordResetCode",
     "User",
 ]

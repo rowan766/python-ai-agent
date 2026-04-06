@@ -95,3 +95,23 @@ export async function uploadKnowledgeDocument(
   })
   return data
 }
+
+export async function downloadKnowledgeDocument(documentId: number, filename: string): Promise<void> {
+  const { data } = await http.get<Blob>(`/api/documents/${documentId}/download`, {
+    responseType: 'blob',
+  })
+
+  const blobUrl = window.URL.createObjectURL(data)
+  const anchor = document.createElement('a')
+  anchor.href = blobUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(blobUrl)
+}
+
+export async function deleteKnowledgeDocument(documentId: number): Promise<{ status: string; message: string }> {
+  const { data } = await http.delete<{ status: string; message: string }>(`/api/documents/${documentId}`)
+  return data
+}

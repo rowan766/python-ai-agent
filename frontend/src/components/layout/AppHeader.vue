@@ -34,7 +34,7 @@ function logout() {
         </el-breadcrumb-item>
       </el-breadcrumb>
       <div class="app-header__headline">
-        {{ breadcrumbs.at(-1) || 'Enterprise RAG' }}
+        {{ breadcrumbs.at(-1) || '知识平台' }}
       </div>
     </div>
 
@@ -63,8 +63,8 @@ function logout() {
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="router.push('/onboarding')">
-              组织接入
+            <el-dropdown-item @click="router.push('/organization?tab=access')">
+              组织中心
             </el-dropdown-item>
             <el-dropdown-item divided @click="logout">
               <el-icon><SwitchButton /></el-icon>
@@ -86,10 +86,10 @@ function logout() {
 }
 
 .app-header__headline {
-  margin-top: 12px;
-  font-size: 28px;
+  margin-top: 10px;
+  font-size: 24px;
   font-weight: 700;
-  color: #183630;
+  color: #111827;
   letter-spacing: -0.03em;
 }
 
@@ -112,18 +112,19 @@ function logout() {
   width: 38px;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(145deg, #1f6f54, #ba8a2e);
+  background: linear-gradient(145deg, #1b6b56, #c29137);
   color: #fff;
   font-weight: 700;
+  box-shadow: 0 8px 18px rgba(27, 107, 86, 0.18);
 }
 
 .app-header__name {
   font-weight: 600;
-  color: #1d2724;
+  color: #111827;
 }
 
 .app-header__email {
-  color: #6f7169;
+  color: #6b7280;
   font-size: 12px;
 }
 

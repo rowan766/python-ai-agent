@@ -2,14 +2,27 @@
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import { useAuthStore } from '@/stores/auth'
+import { getSidebarCollapsed, setSidebarCollapsed } from '@/utils/storage'
+import { computed, ref, watch } from 'vue'
 
 const authStore = useAuthStore()
+const isSidebarCollapsed = ref(getSidebarCollapsed())
+
+const sidebarWidth = computed(() => (isSidebarCollapsed.value ? '96px' : '288px'))
+
+watch(isSidebarCollapsed, (collapsed) => {
+  setSidebarCollapsed(collapsed)
+})
+
+function toggleSidebar() {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
 </script>
 
 <template>
   <el-container class="app-shell">
-    <el-aside class="app-shell__aside" width="288px">
-      <AppSidebar />
+    <el-aside class="app-shell__aside" :width="sidebarWidth">
+      <AppSidebar :collapsed="isSidebarCollapsed" @toggle="toggleSidebar" />
     </el-aside>
 
     <el-container class="app-shell__main">
@@ -44,6 +57,7 @@ const authStore = useAuthStore()
   height: 100vh;
   overflow: hidden;
   border-right: 1px solid rgba(18, 56, 49, 0.08);
+  transition: width 0.24s ease;
 }
 
 .app-shell__main {

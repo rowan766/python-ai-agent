@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import {
-  Document,
+  ChatDotRound,
+  Expand,
   Files,
+  Fold,
   HomeFilled,
   OfficeBuilding,
+  Search,
 } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -14,12 +17,21 @@ interface MenuItem {
   icon: unknown
 }
 
+const props = defineProps<{
+  collapsed: boolean
+}>()
+
+const emit = defineEmits<{
+  (event: 'toggle'): void
+}>()
+
 const route = useRoute()
 const router = useRouter()
 
 const menuItems: MenuItem[] = [
   { label: '工作台', path: '/workspace', icon: HomeFilled },
-  { label: '智能问答', path: '/rag/search', icon: Document },
+  { label: 'AI 对话', path: '/ai/chat', icon: ChatDotRound },
+  { label: '知识检索', path: '/knowledge/search', icon: Search },
   { label: '文档中心', path: '/documents', icon: Files },
   { label: '组织中心', path: '/organization', icon: OfficeBuilding },
 ]
@@ -32,14 +44,26 @@ function handleSelect(path: string) {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside :class="['sidebar', { 'sidebar--collapsed': props.collapsed }]">
     <div class="sidebar__brand">
-      <div class="sidebar__mark">AI</div>
-      <div class="sidebar__title">知识平台</div>
+      <div class="sidebar__brand-main">
+        <div class="sidebar__mark">AI</div>
+        <div v-if="!props.collapsed" class="sidebar__title">知识平台</div>
+      </div>
+
+      <el-tooltip :content="props.collapsed ? '展开菜单' : '收起菜单'" placement="right">
+        <button class="sidebar__toggle" type="button" @click="emit('toggle')">
+          <el-icon>
+            <component :is="props.collapsed ? Expand : Fold" />
+          </el-icon>
+        </button>
+      </el-tooltip>
     </div>
 
     <el-menu
       :default-active="activePath"
+      :collapse="props.collapsed"
+      :collapse-transition="false"
       class="sidebar__menu"
       @select="handleSelect"
     >
@@ -67,8 +91,16 @@ function handleSelect(path: string) {
 .sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
   padding: 4px 8px 10px;
+}
+
+.sidebar__brand-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
 }
 
 .sidebar__mark {
@@ -89,11 +121,35 @@ function handleSelect(path: string) {
   font-size: 16px;
   font-weight: 700;
   color: #fffaf0;
+  white-space: nowrap;
+}
+
+.sidebar__toggle {
+  display: grid;
+  height: 34px;
+  width: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 248, 232, 0.12);
+  color: #fff6dd;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.sidebar__toggle:hover {
+  background: rgba(255, 248, 232, 0.2);
+  transform: translateY(-1px);
 }
 
 .sidebar__menu {
   border-right: 0;
   background: transparent;
+}
+
+:deep(.sidebar__menu.el-menu--collapse) {
+  width: 100%;
 }
 
 :deep(.sidebar__menu .el-menu-item) {
@@ -109,6 +165,16 @@ function handleSelect(path: string) {
   transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
+:deep(.sidebar__menu.el-menu--collapse .el-menu-item) {
+  justify-content: center;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+:deep(.sidebar__menu.el-menu--collapse .el-menu-item .el-icon) {
+  margin-right: 0;
+}
+
 :deep(.sidebar__menu .el-menu-item.is-active) {
   background: rgba(255, 248, 232, 0.16);
   color: #fffdf7;
@@ -122,5 +188,10 @@ function handleSelect(path: string) {
 
 .sidebar__label {
   font-size: 14px;
+}
+
+.sidebar--collapsed {
+  padding-right: 12px;
+  padding-left: 12px;
 }
 </style>

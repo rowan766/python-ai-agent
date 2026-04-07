@@ -87,9 +87,13 @@ onMounted(() => {
       <el-card shadow="never" class="soft-card">
         <template #header>快捷入口</template>
         <div class="action-grid">
-          <router-link class="action-tile" to="/rag/search">
-            <strong>智能问答</strong>
-            <span>知识检索与 AI 对话。</span>
+          <router-link class="action-tile" to="/ai/chat">
+            <strong>AI 对话</strong>
+            <span>多轮对话、持续追问与回答生成。</span>
+          </router-link>
+          <router-link class="action-tile" to="/knowledge/search">
+            <strong>知识检索</strong>
+            <span>按知识库范围检索文档片段。</span>
           </router-link>
           <router-link class="action-tile" to="/documents?tab=documents">
             <strong>文档中心</strong>

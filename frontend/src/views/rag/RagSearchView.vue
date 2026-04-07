@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import axios from 'axios'
-import { ChatDotRound, Plus, Search } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import DOMPurify from 'dompurify'
 import MarkdownIt from 'markdown-it'
 import { fetchKnowledgeBases } from '@/api/modules/knowledge'
@@ -8,9 +8,8 @@ import { queryKnowledge, streamChat } from '@/api/modules/rag'
 import type { KnowledgeBaseItem } from '@/types/knowledge'
 import type { ChatMessage, SearchResponse } from '@/types/rag'
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, reactive, ref } from 'vue'
-
-type AiTab = 'search' | 'chat'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 interface ChatSession {
   id: string
@@ -19,7 +18,7 @@ interface ChatSession {
   messages: ChatMessage[]
 }
 
-const activeTab = ref<AiTab>('search')
+const route = useRoute()
 const loading = ref(false)
 const response = ref<SearchResponse | null>(null)
 const knowledgeBases = ref<KnowledgeBaseItem[]>([])
@@ -53,8 +52,15 @@ const markdown = new MarkdownIt({
   breaks: true,
 })
 
+const isChatMode = computed(() => route.name === 'ai-chat')
 const currentConversation = computed(() =>
   conversations.value.find((item) => item.id === currentConversationId.value) ?? null,
+)
+const pageTitle = computed(() =>
+  isChatMode.value ? currentConversation.value?.title || '新对话' : '知识检索',
+)
+const pageSubtitle = computed(() =>
+  isChatMode.value ? '连续对话' : '按知识库范围检索文档片段',
 )
 
 function createConversation(title = '新对话'): ChatSession {
@@ -120,13 +126,11 @@ async function handleSearch() {
 
 function applyQuickQuery(value: string) {
   searchForm.query = value
-  activeTab.value = 'search'
   void handleSearch()
 }
 
 function startNewConversation() {
   createConversation()
-  activeTab.value = 'chat'
 }
 
 function useQuickPrompt(prompt: string) {
@@ -134,7 +138,6 @@ function useQuickPrompt(prompt: string) {
     createConversation(prompt.slice(0, 16) || '新对话')
   }
   chatForm.input = prompt
-  activeTab.value = 'chat'
 }
 
 async function sendChatMessage() {
@@ -207,40 +210,37 @@ function renderMarkdown(content: string): string {
 
 onMounted(async () => {
   createConversation()
-  await loadKnowledgeBaseOptions()
+  if (!isChatMode.value) {
+    await loadKnowledgeBaseOptions()
+  }
 })
+
+watch(
+  isChatMode,
+  async (chatMode) => {
+    if (!chatMode && !knowledgeBases.value.length) {
+      await loadKnowledgeBaseOptions()
+    }
+  },
+  { immediate: false },
+)
 </script>
 
 <template>
   <div class="page ai-page">
-    <section class="ai-shell">
+    <section :class="['ai-shell', { 'ai-shell--chat': isChatMode }]">
       <aside class="ai-sidebar">
-        <el-button class="ai-sidebar__new" type="primary" :icon="Plus" @click="startNewConversation">
+        <el-button
+          v-if="isChatMode"
+          class="ai-sidebar__new"
+          type="primary"
+          :icon="Plus"
+          @click="startNewConversation"
+        >
           新建对话
         </el-button>
 
-        <div class="ai-mode-switch">
-          <button
-            type="button"
-            class="ai-mode-switch__item"
-            :class="{ 'ai-mode-switch__item--active': activeTab === 'chat' }"
-            @click="activeTab = 'chat'"
-          >
-            <el-icon><ChatDotRound /></el-icon>
-            <span>AI 对话</span>
-          </button>
-          <button
-            type="button"
-            class="ai-mode-switch__item"
-            :class="{ 'ai-mode-switch__item--active': activeTab === 'search' }"
-            @click="activeTab = 'search'"
-          >
-            <el-icon><Search /></el-icon>
-            <span>知识检索</span>
-          </button>
-        </div>
-
-        <div v-if="activeTab === 'chat'" class="chat-session-list">
+        <div v-if="isChatMode" class="chat-session-list">
           <button
             v-for="session in conversations"
             :key="session.id"
@@ -275,20 +275,18 @@ onMounted(async () => {
       <section class="ai-main">
         <header class="ai-main__header">
           <div class="ai-main__title">
-            <strong>{{ activeTab === 'chat' ? currentConversation?.title || '新对话' : '知识检索' }}</strong>
-            <span>
-              {{ activeTab === 'chat' ? '连续对话' : '按知识库范围检索文档片段' }}
-            </span>
+            <strong>{{ pageTitle }}</strong>
+            <span>{{ pageSubtitle }}</span>
           </div>
           <el-input
-            v-if="activeTab === 'chat'"
+            v-if="isChatMode"
             v-model="chatForm.model"
             placeholder="模型，例如 qwen-turbo"
             class="ai-main__model"
           />
         </header>
 
-        <template v-if="activeTab === 'chat'">
+        <template v-if="isChatMode">
           <div class="ai-main__body chat-body">
             <div v-if="!currentConversation?.messages.length" class="chat-empty">
               <h2>今天想问点什么？</h2>
@@ -436,10 +434,17 @@ onMounted(async () => {
   min-height: calc(100vh - 160px);
 }
 
+.ai-shell--chat {
+  height: calc(100dvh - 160px);
+  min-height: calc(100dvh - 160px);
+  overflow: hidden;
+}
+
 .ai-sidebar {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
   border-radius: 24px;
   padding: 16px;
   background:
@@ -453,34 +458,6 @@ onMounted(async () => {
   justify-content: flex-start;
 }
 
-.ai-mode-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  border-radius: 18px;
-  padding: 6px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.ai-mode-switch__item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 14px;
-  padding: 11px 12px;
-  background: transparent;
-  color: rgba(246, 241, 232, 0.76);
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.ai-mode-switch__item--active {
-  background: rgba(255, 248, 232, 0.16);
-  color: #fffdf7;
-}
-
 .chat-session-list,
 .search-shortcuts {
   display: grid;
@@ -489,6 +466,7 @@ onMounted(async () => {
 }
 
 .chat-session-list {
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -549,6 +527,7 @@ onMounted(async () => {
 
 .ai-main {
   display: flex;
+  height: 100%;
   min-height: 0;
   flex-direction: column;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -586,12 +565,14 @@ onMounted(async () => {
 
 .ai-main__body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
 .chat-body {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .chat-empty {
@@ -748,6 +729,7 @@ onMounted(async () => {
 }
 
 .chat-compose {
+  flex-shrink: 0;
   padding: 0 24px 24px;
 }
 

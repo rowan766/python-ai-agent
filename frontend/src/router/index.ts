@@ -68,10 +68,22 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'rag/search',
-        name: 'rag-search',
+        path: 'ai/chat',
+        name: 'ai-chat',
         component: () => import('@/views/rag/RagSearchView.vue'),
-        meta: { title: '智能问答', navKey: '/rag/search', requiresAuth: true },
+        meta: { title: 'AI 对话', navKey: '/ai/chat', requiresAuth: true },
+      },
+      {
+        path: 'knowledge/search',
+        name: 'knowledge-search',
+        component: () => import('@/views/rag/RagSearchView.vue'),
+        meta: { title: '知识检索', navKey: '/knowledge/search', requiresAuth: true },
+      },
+      {
+        path: 'rag/search',
+        redirect: {
+          name: 'knowledge-search',
+        },
       },
       {
         path: 'approvals',

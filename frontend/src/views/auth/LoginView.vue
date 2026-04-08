@@ -27,6 +27,13 @@ const resetDialogVisible = ref(false)
 const sendingResetCode = ref(false)
 const submittingReset = ref(false)
 const resendCountdown = ref(0)
+const demoAccounts = import.meta.env.DEV
+  ? [
+      { label: '产品负责人', account: 'demo_lena', password: 'Password123!' },
+      { label: '研发负责人', account: 'demo_chen', password: 'Password123!' },
+      { label: '待入职成员', account: 'demo_jack', password: 'Password123!' },
+    ]
+  : []
 
 const resetForm = reactive({
   email: '',
@@ -141,7 +148,11 @@ async function handleSubmit() {
   try {
     await authStore.login(form)
     ElMessage.success('登录成功，欢迎回来。')
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/workspace'
+    const redirect = typeof route.query.redirect === 'string'
+      ? route.query.redirect
+      : authStore.organizationReady
+        ? '/workspace'
+        : '/onboarding'
     await router.push(redirect)
   } catch (error) {
     ElMessage.error(getErrorMessage(error, '登录失败，请检查账号和密码。'))
@@ -297,6 +308,18 @@ onMounted(() => {
         <div class="auth-card__footer">
           还没有账号？
           <router-link to="/register">去注册</router-link>
+        </div>
+
+        <div v-if="demoAccounts.length" class="auth-card__demo">
+          <strong>开发演示账号</strong>
+          <div
+            v-for="account in demoAccounts"
+            :key="account.account"
+            class="auth-card__demo-row"
+          >
+            <span>{{ account.label }}</span>
+            <code>{{ account.account }} / {{ account.password }}</code>
+          </div>
         </div>
       </div>
     </div>
@@ -541,6 +564,35 @@ h1 {
   color: #1f6f54;
   font-weight: 600;
   text-decoration: none;
+}
+
+.auth-card__demo {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  border-top: 1px solid rgba(25, 48, 43, 0.08);
+  padding-top: 18px;
+}
+
+.auth-card__demo strong {
+  color: #1d2724;
+  font-size: 14px;
+}
+
+.auth-card__demo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #6f7169;
+  font-size: 13px;
+}
+
+.auth-card__demo-row code {
+  border-radius: 10px;
+  padding: 4px 8px;
+  background: #f4efe5;
+  color: #1d2724;
 }
 
 .reset-dialog__intro {

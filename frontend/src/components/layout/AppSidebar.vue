@@ -7,9 +7,12 @@ import {
   HomeFilled,
   OfficeBuilding,
   Search,
+  Finished,
+  UploadFilled,
 } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 interface MenuItem {
   label: string
@@ -27,14 +30,24 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
-const menuItems: MenuItem[] = [
-  { label: '工作台', path: '/workspace', icon: HomeFilled },
-  { label: 'AI 对话', path: '/ai/chat', icon: ChatDotRound },
-  { label: '知识检索', path: '/knowledge/search', icon: Search },
-  { label: '文档中心', path: '/documents', icon: Files },
-  { label: '组织中心', path: '/organization', icon: OfficeBuilding },
-]
+const menuItems = computed<MenuItem[]>(() => {
+  if (!authStore.organizationReady) {
+    return [{ label: '组织接入', path: '/onboarding', icon: OfficeBuilding }]
+  }
+
+  return [
+    { label: '工作台', path: '/workspace', icon: HomeFilled },
+    { label: '知识空间', path: '/knowledge-bases', icon: Files },
+    { label: '文档中心', path: '/documents', icon: Files },
+    { label: '上传文档', path: '/documents/upload', icon: UploadFilled },
+    { label: '知识检索', path: '/knowledge/search', icon: Search },
+    { label: 'AI 对话', path: '/ai/chat', icon: ChatDotRound },
+    { label: '审批中心', path: '/approvals', icon: Finished },
+    { label: '组织与部门', path: '/organization', icon: OfficeBuilding },
+  ]
+})
 
 const activePath = computed(() => String(route.meta.navKey ?? route.path))
 

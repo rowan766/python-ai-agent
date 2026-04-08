@@ -1,29 +1,56 @@
 <script setup lang="ts">
 import type { AxiosError } from 'axios'
 import { UploadFilled } from '@element-plus/icons-vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { fetchKnowledgeBases, uploadKnowledgeDocument } from '@/api/modules/knowledge'
 import { fetchSupportedFormats } from '@/api/modules/rag'
 import type { KnowledgeBaseItem, UploadKnowledgeDocumentResponse } from '@/types/knowledge'
 import type { UploadRequestOptions } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
+import { formatVisibilityScope, getPreferredMembership } from '@/utils/organization'
+import { useAuthStore } from '@/stores/auth'
+
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 
 const uploading = ref(false)
+const loading = ref(false)
 const supportedFormats = ref<string[]>([])
 const knowledgeBases = ref<KnowledgeBaseItem[]>([])
 const selectedKnowledgeBaseId = ref<number | undefined>(undefined)
 const selectedVisibilityScope = ref('knowledge_base_default')
 const uploadResult = ref<UploadKnowledgeDocumentResponse | null>(null)
 
+const memberships = computed(() => authStore.user?.memberships ?? [])
+const preferredMembership = computed(() => getPreferredMembership(memberships.value))
+const selectedKnowledgeBase = computed(
+  () => knowledgeBases.value.find((item) => item.id === selectedKnowledgeBaseId.value) ?? null,
+)
 const acceptValue = computed(() => supportedFormats.value.join(','))
+
 const visibilityOptions = [
-  { label: '沿用知识库默认策略', value: 'knowledge_base_default' },
-  { label: '部门私有', value: 'department_private' },
-  { label: '部门共享', value: 'department_shared' },
-  { label: '全组织公开', value: 'org_public' },
+  { label: '沿用空间默认策略', value: 'knowledge_base_default' },
+  { label: '本部门可见', value: 'department_private' },
+  { label: '共享给相关部门后可见', value: 'department_shared' },
+  { label: '全组织可见', value: 'org_public' },
 ]
 
-onMounted(async () => {
+function syncKnowledgeBaseFromRoute() {
+  const rawKnowledgeBaseId = route.query.knowledgeBaseId
+  if (typeof rawKnowledgeBaseId !== 'string' || !rawKnowledgeBaseId.trim()) {
+    return
+  }
+
+  const parsed = Number(rawKnowledgeBaseId)
+  if (Number.isInteger(parsed)) {
+    selectedKnowledgeBaseId.value = parsed
+  }
+}
+
+async function loadOptions() {
+  loading.value = true
   try {
     const [formatResult, knowledgeBaseResult] = await Promise.all([
       fetchSupportedFormats(),
@@ -31,15 +58,30 @@ onMounted(async () => {
     ])
     supportedFormats.value = formatResult.supported_formats
     knowledgeBases.value = knowledgeBaseResult.items
-    selectedKnowledgeBaseId.value = knowledgeBaseResult.items[0]?.id
+
+    const hasSelectedKnowledgeBase = knowledgeBaseResult.items.some(
+      (item) => item.id === selectedKnowledgeBaseId.value,
+    )
+
+    if (!hasSelectedKnowledgeBase) {
+      const preferredBase =
+        knowledgeBaseResult.items.find(
+          (item) => item.department_id === preferredMembership.value?.department_id,
+        )
+        ?? knowledgeBaseResult.items[0]
+      selectedKnowledgeBaseId.value = preferredBase?.id
+    }
   } catch (error) {
+    ElMessage.error('读取上传配置失败，请稍后重试。')
     console.error(error)
+  } finally {
+    loading.value = false
   }
-})
+}
 
 async function handleUpload(options: UploadRequestOptions) {
   if (!selectedKnowledgeBaseId.value) {
-    ElMessage.warning('请先选择归属知识库空间。')
+    ElMessage.warning('请先选择归属知识空间。')
     return
   }
 
@@ -54,50 +96,67 @@ async function handleUpload(options: UploadRequestOptions) {
       visibility_scope: selectedVisibilityScope.value,
     })
     uploadResult.value = result
-    ElMessage.success(`上传成功，已生成 ${result.document.chunks_count} 个切片。`)
+    ElMessage.success(`上传成功，已生成 ${result.document.chunks_count} 个片段。`)
     options.onSuccess?.(result)
   } catch (error) {
     const axiosError = error as AxiosError<{ detail?: string }>
-    const detail =
-      axiosError.response?.data?.detail ||
-      axiosError.message ||
-      '上传失败，请确认后端服务、模型配置和文件格式。'
-    ElMessage.error(detail)
+    ElMessage.error(
+      axiosError.response?.data?.detail
+      || axiosError.message
+      || '上传失败，请确认后端服务、模型配置和文件格式。',
+    )
     console.error(error)
   } finally {
     uploading.value = false
   }
 }
+
+watch(
+  () => route.query.knowledgeBaseId,
+  () => {
+    syncKnowledgeBaseFromRoute()
+  },
+)
+
+onMounted(async () => {
+  syncKnowledgeBaseFromRoute()
+  await loadOptions()
+})
 </script>
 
 <template>
   <div class="page">
-    <section class="hero-card">
+    <section class="hero-card upload-hero">
       <div>
-        <p class="page-eyebrow">Upload Pipeline</p>
-        <h2>上传入口已经升级为“先选知识库空间，再完成解析与入库”。</h2>
+        <p class="page-eyebrow">Upload</p>
+        <h2>上传页只做一件事：把资料稳稳地投递到正确的知识空间。</h2>
         <p class="page-copy">
-          当前后端接口使用 `/api/documents/upload`。上传成功后，文档会同时落到业务表和 Qdrant，后续检索可以按知识库空间和组织范围做过滤。
+          先选归属空间，再上传文件。空间名称和默认可见范围会帮助你确认这份资料应该落在哪里，避免“先上传再补归属”的反向操作。
         </p>
+      </div>
+      <div class="upload-hero__actions">
+        <el-button plain @click="router.push('/knowledge-bases')">返回知识空间</el-button>
+        <el-button plain @click="router.push('/documents')">查看文档清单</el-button>
       </div>
     </section>
 
     <section class="grid-two">
       <el-card shadow="never" class="soft-card">
-        <template #header>上传文件</template>
+        <template #header>上传入口</template>
         <el-alert
           v-if="!knowledgeBases.length"
           class="upload-alert"
-          title="当前还没有可上传的知识库空间。请先完成组织接入，并由负责人创建至少一个知识库空间。"
+          title="当前还没有可上传的知识空间。请先在知识空间页创建一个空间，或联系负责人开通共享范围。"
           type="warning"
           :closable="false"
           show-icon
         />
         <el-form label-position="top" class="upload-form">
-          <el-form-item label="归属知识库空间">
+          <el-form-item label="归属知识空间">
             <el-select
               v-model="selectedKnowledgeBaseId"
-              placeholder="请选择知识库空间"
+              :loading="loading"
+              placeholder="请选择知识空间"
               style="width: 100%"
             >
               <el-option
@@ -109,7 +168,7 @@ async function handleUpload(options: UploadRequestOptions) {
             </el-select>
           </el-form-item>
 
-          <el-form-item label="文档可见性">
+          <el-form-item label="文档可见范围">
             <el-radio-group v-model="selectedVisibilityScope">
               <el-radio-button
                 v-for="option in visibilityOptions"
@@ -142,25 +201,36 @@ async function handleUpload(options: UploadRequestOptions) {
       </el-card>
 
       <el-card shadow="never" class="soft-card">
-        <template #header>当前链路说明</template>
-        <el-timeline>
-          <el-timeline-item timestamp="1">先选择归属知识库空间和文档可见性</el-timeline-item>
-          <el-timeline-item timestamp="2">文件落到后端 `uploads/` 临时目录并按格式解析</el-timeline-item>
-          <el-timeline-item timestamp="3">切片后使用 `text-embedding-v3` 分批生成向量</el-timeline-item>
-          <el-timeline-item timestamp="4">文档实体入库，同时写入 Qdrant 并带上部门/空间/文档标识</el-timeline-item>
-        </el-timeline>
+        <template #header>当前空间确认</template>
+        <div v-if="selectedKnowledgeBase" class="roadmap-boxes">
+          <div class="roadmap-box">
+            <strong>{{ selectedKnowledgeBase.name }}</strong>
+            <span>归属部门：{{ selectedKnowledgeBase.department_name }}</span>
+          </div>
+          <div class="roadmap-box">
+            <strong>默认可见范围</strong>
+            <span>{{ formatVisibilityScope(selectedKnowledgeBase.visibility_scope) }}</span>
+          </div>
+          <div class="roadmap-box">
+            <strong>已有文档</strong>
+            <span>{{ selectedKnowledgeBase.document_count }} 份，可作为上传前的参照上下文。</span>
+          </div>
+        </div>
+        <el-empty v-else description="先选择一个知识空间，再确认上传去向。" />
       </el-card>
     </section>
 
     <el-card v-if="uploadResult" shadow="never" class="soft-card">
-      <template #header>上传结果</template>
+      <template #header>最近一次上传结果</template>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="状态">{{ uploadResult.status }}</el-descriptions-item>
         <el-descriptions-item label="文件名">{{ uploadResult.document.filename }}</el-descriptions-item>
-        <el-descriptions-item label="知识库">{{ uploadResult.document.knowledge_base_name }}</el-descriptions-item>
+        <el-descriptions-item label="知识空间">{{ uploadResult.document.knowledge_base_name }}</el-descriptions-item>
         <el-descriptions-item label="归属部门">{{ uploadResult.document.department_name }}</el-descriptions-item>
         <el-descriptions-item label="切片数量">{{ uploadResult.document.chunks_count }}</el-descriptions-item>
-        <el-descriptions-item label="可见性">{{ uploadResult.document.visibility_scope }}</el-descriptions-item>
+        <el-descriptions-item label="可见范围">
+          {{ formatVisibilityScope(uploadResult.document.visibility_scope) }}
+        </el-descriptions-item>
         <el-descriptions-item label="返回消息">{{ uploadResult.message }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
@@ -168,6 +238,16 @@ async function handleUpload(options: UploadRequestOptions) {
 </template>
 
 <style scoped>
+.upload-hero {
+  align-items: center;
+}
+
+.upload-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .upload-alert {
   margin-bottom: 18px;
   border-radius: 18px;

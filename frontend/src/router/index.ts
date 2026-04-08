@@ -3,6 +3,10 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { pinia } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 
+function resolveAuthenticatedLandingPath(organizationReady: boolean): { name: string } {
+  return organizationReady ? { name: 'workspace' } : { name: 'onboarding' }
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -32,52 +36,49 @@ const routes: RouteRecordRaw[] = [
         path: 'organization',
         name: 'organization',
         component: () => import('@/views/organization/OrganizationCenterView.vue'),
-        meta: { title: '组织中心', navKey: '/organization', requiresAuth: true },
+        meta: { title: '组织与部门', navKey: '/organization', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'onboarding',
-        redirect: {
-          name: 'organization',
-          query: { tab: 'access' },
-        },
+        name: 'onboarding',
+        component: () => import('@/views/OnboardingView.vue'),
+        meta: { title: '组织接入', navKey: '/onboarding', requiresAuth: true },
       },
       {
         path: 'departments',
         name: 'departments',
         component: () => import('@/views/organization/DepartmentManagementView.vue'),
-        meta: { title: '部门治理', navKey: '/organization', requiresAuth: true },
+        meta: { title: '部门治理', navKey: '/organization', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'knowledge-bases',
-        redirect: {
-          name: 'documents',
-          query: { tab: 'bases' },
-        },
+        name: 'knowledge-bases',
+        component: () => import('@/views/knowledge/KnowledgeBaseListView.vue'),
+        meta: { title: '知识空间', navKey: '/knowledge-bases', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'documents',
         name: 'documents',
         component: () => import('@/views/documents/DocumentLibraryView.vue'),
-        meta: { title: '文档中心', navKey: '/documents', requiresAuth: true },
+        meta: { title: '文档中心', navKey: '/documents', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'documents/upload',
-        redirect: {
-          name: 'documents',
-          query: { tab: 'upload' },
-        },
+        name: 'document-upload',
+        component: () => import('@/views/documents/DocumentUploadView.vue'),
+        meta: { title: '上传文档', navKey: '/documents/upload', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'ai/chat',
         name: 'ai-chat',
         component: () => import('@/views/rag/RagSearchView.vue'),
-        meta: { title: 'AI 对话', navKey: '/ai/chat', requiresAuth: true },
+        meta: { title: 'AI 对话', navKey: '/ai/chat', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'knowledge/search',
         name: 'knowledge-search',
         component: () => import('@/views/rag/RagSearchView.vue'),
-        meta: { title: '知识检索', navKey: '/knowledge/search', requiresAuth: true },
+        meta: { title: '知识检索', navKey: '/knowledge/search', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'rag/search',
@@ -87,10 +88,9 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'approvals',
-        redirect: {
-          name: 'organization',
-          query: { tab: 'approvals' },
-        },
+        name: 'approvals',
+        component: () => import('@/views/approvals/ApprovalCenterView.vue'),
+        meta: { title: '审批中心', navKey: '/approvals', requiresAuth: true, requiresOrgReady: true },
       },
     ],
   },
@@ -115,10 +115,6 @@ router.beforeEach(async (to) => {
     authStore.hydrate()
   }
 
-  if (to.meta.publicOnly && authStore.isAuthenticated) {
-    return { name: 'workspace' }
-  }
-
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return {
       name: 'login',
@@ -141,6 +137,29 @@ router.beforeEach(async (to) => {
         },
       }
     }
+  }
+
+  if (to.meta.publicOnly && authStore.isAuthenticated) {
+    try {
+      await authStore.ensureSession()
+      return resolveAuthenticatedLandingPath(authStore.organizationReady)
+    } catch {
+      authStore.logout()
+      return true
+    }
+  }
+
+  if (
+    authStore.isAuthenticated &&
+    !authStore.organizationReady &&
+    to.meta.requiresAuth &&
+    to.name !== 'onboarding'
+  ) {
+    return { name: 'onboarding' }
+  }
+
+  if (authStore.isAuthenticated && authStore.organizationReady && to.name === 'onboarding') {
+    return { name: 'workspace' }
   }
 
   return true

@@ -1,144 +1,197 @@
 <script setup lang="ts">
-import { fetchKnowledgeBases, fetchKnowledgeDocuments } from '@/api/modules/knowledge'
-import { fetchChatHealth, fetchEmbeddingHealth, fetchSupportedFormats } from '@/api/modules/rag'
+import { computed, onMounted, ref } from 'vue'
+import { fetchKnowledgeBases, fetchKnowledgeDocuments, fetchMyKnowledgeBaseShareRequests, fetchPendingKnowledgeBaseShareRequests } from '@/api/modules/knowledge'
+import { fetchMyDepartmentJoinRequests, fetchPendingDepartmentJoinRequests } from '@/api/modules/organization'
 import { useAuthStore } from '@/stores/auth'
-import type { KnowledgeBaseListResponse, KnowledgeDocumentListResponse } from '@/types/knowledge'
-import type { ModelHealthResponse } from '@/types/rag'
-import { onMounted, ref } from 'vue'
+import { formatMembershipLabel, getPreferredMembership } from '@/utils/organization'
 
 const authStore = useAuthStore()
 
-const supportedFormats = ref<string[]>([])
-const embeddingHealth = ref<ModelHealthResponse | null>(null)
-const chatHealth = ref<ModelHealthResponse | null>(null)
-const knowledgeSummary = ref<KnowledgeBaseListResponse | null>(null)
-const documentSummary = ref<KnowledgeDocumentListResponse | null>(null)
 const loading = ref(false)
+const knowledgeBaseCount = ref(0)
+const documentCount = ref(0)
+const pendingJoinCount = ref(0)
+const pendingShareCount = ref(0)
+const myJoinCount = ref(0)
+const myShareCount = ref(0)
 
-async function loadDashboard() {
+const memberships = computed(() => authStore.user?.memberships ?? [])
+const currentMembership = computed(() => getPreferredMembership(memberships.value))
+const pendingApprovalCount = computed(() => pendingJoinCount.value + pendingShareCount.value)
+const myRequestCount = computed(() => myJoinCount.value + myShareCount.value)
+
+const actionTiles = computed(() => [
+  {
+    title: '进入知识空间',
+    description: '先从你当前可访问的空间开始浏览和治理资料。',
+    to: '/knowledge-bases',
+  },
+  {
+    title: '上传新文档',
+    description: '上传入口已经独立出来，只做一件事。',
+    to: '/documents/upload',
+  },
+  {
+    title: '查看审批待办',
+    description: pendingApprovalCount.value
+      ? `你当前还有 ${pendingApprovalCount.value} 条待处理审批。`
+      : '当前没有待处理审批，适合继续整理知识资产。',
+    to: '/approvals',
+  },
+  {
+    title: '开始知识检索',
+    description: '在权限范围内直接搜索文档片段和知识来源。',
+    to: '/knowledge/search',
+  },
+])
+
+async function loadWorkspace() {
   loading.value = true
   try {
-    const [formatsResult, embeddingResult, chatResult, knowledgeResult, documentResult] =
-      await Promise.allSettled([
-      fetchSupportedFormats(),
-      fetchEmbeddingHealth(),
-      fetchChatHealth(),
+    const [
+      knowledgeBaseResult,
+      documentResult,
+      pendingJoinResult,
+      pendingShareResult,
+      myJoinResult,
+      myShareResult,
+    ] = await Promise.allSettled([
       fetchKnowledgeBases(),
       fetchKnowledgeDocuments(),
+      fetchPendingDepartmentJoinRequests(),
+      fetchPendingKnowledgeBaseShareRequests(),
+      fetchMyDepartmentJoinRequests(),
+      fetchMyKnowledgeBaseShareRequests(),
     ])
 
-    supportedFormats.value =
-      formatsResult.status === 'fulfilled' ? formatsResult.value.supported_formats : []
-    embeddingHealth.value = embeddingResult.status === 'fulfilled' ? embeddingResult.value : null
-    chatHealth.value = chatResult.status === 'fulfilled' ? chatResult.value : null
-    knowledgeSummary.value = knowledgeResult.status === 'fulfilled' ? knowledgeResult.value : null
-    documentSummary.value = documentResult.status === 'fulfilled' ? documentResult.value : null
+    knowledgeBaseCount.value = knowledgeBaseResult.status === 'fulfilled' ? knowledgeBaseResult.value.count : 0
+    documentCount.value = documentResult.status === 'fulfilled' ? documentResult.value.count : 0
+    pendingJoinCount.value = pendingJoinResult.status === 'fulfilled' ? pendingJoinResult.value.count : 0
+    pendingShareCount.value = pendingShareResult.status === 'fulfilled' ? pendingShareResult.value.count : 0
+    myJoinCount.value = myJoinResult.status === 'fulfilled' ? myJoinResult.value.count : 0
+    myShareCount.value = myShareResult.status === 'fulfilled' ? myShareResult.value.count : 0
   } finally {
     loading.value = false
   }
 }
 
 onMounted(() => {
-  void loadDashboard()
+  void loadWorkspace()
 })
 </script>
 
 <template>
   <div class="page">
-    <section class="hero-card">
+    <section class="hero-card workspace-hero">
       <div>
-        <h2>工作台</h2>
-        <p class="page-copy">{{ authStore.user?.email }}</p>
+        <p class="page-eyebrow">Workspace</p>
+        <h2>先从你自己的范围开始工作，而不是先理解整套治理体系。</h2>
+        <p class="page-copy">
+          当前工作部门、可访问空间、待处理审批和我的申请都已经收敛到这里。进入下一步时，你只需要按任务走，不需要自己拼产品地图。
+        </p>
       </div>
 
       <div class="hero-card__summary">
-        <span>{{ authStore.displayName }}</span>
-        <small>{{ authStore.organizationReady ? '组织已接入' : '组织待接入' }}</small>
+        <span>{{ currentMembership?.department_name || '未设置' }}</span>
+        <small>当前工作部门</small>
       </div>
     </section>
 
     <section class="stat-grid">
       <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">当前组织状态</span>
-        <strong>{{ authStore.organizationReady ? '已加入组织' : '待加入组织' }}</strong>
-        <p>组织关系决定权限范围。</p>
+        <span class="metric-card__label">工作部门</span>
+        <strong>{{ currentMembership?.department_name || '--' }}</strong>
+        <p>上传、浏览和协作都会优先以这个部门为默认上下文。</p>
       </el-card>
 
       <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">可访问知识库</span>
-        <strong>{{ knowledgeSummary?.count ?? '--' }}</strong>
-        <p>当前账号可见空间。</p>
+        <span class="metric-card__label">可访问知识空间</span>
+        <strong>{{ knowledgeBaseCount }}</strong>
+        <p>当前组织归属和共享范围内可见的空间总数。</p>
       </el-card>
 
       <el-card class="metric-card" shadow="hover">
         <span class="metric-card__label">可访问文档</span>
-        <strong>{{ documentSummary?.count ?? '--' }}</strong>
-        <p>已入库文档数量。</p>
+        <strong>{{ documentCount }}</strong>
+        <p>当前权限范围内已入库文档数量。</p>
       </el-card>
 
       <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">支持上传格式</span>
-        <strong>{{ supportedFormats.length || '--' }}</strong>
-        <p>{{ supportedFormats.join(' / ') || '正在加载格式配置...' }}</p>
+        <span class="metric-card__label">待处理审批</span>
+        <strong>{{ pendingApprovalCount }}</strong>
+        <p>包括加入部门审批和知识空间共享审批。</p>
       </el-card>
     </section>
 
     <section class="grid-two">
       <el-card shadow="never" class="soft-card">
-        <template #header>快捷入口</template>
+        <template #header>下一步操作</template>
         <div class="action-grid">
-          <router-link class="action-tile" to="/ai/chat">
-            <strong>AI 对话</strong>
-            <span>多轮对话、持续追问与回答生成。</span>
-          </router-link>
-          <router-link class="action-tile" to="/knowledge/search">
-            <strong>知识检索</strong>
-            <span>按知识库范围检索文档片段。</span>
-          </router-link>
-          <router-link class="action-tile" to="/documents?tab=documents">
-            <strong>文档中心</strong>
-            <span>知识库、文档上传与维护。</span>
-          </router-link>
-          <router-link class="action-tile" to="/documents?tab=upload">
-            <strong>上传新文档</strong>
-            <span>上传并写入向量库。</span>
-          </router-link>
-          <router-link class="action-tile" to="/organization?tab=approvals">
-            <strong>组织中心</strong>
-            <span>组织、部门、权限与审批。</span>
+          <router-link
+            v-for="tile in actionTiles"
+            :key="tile.title"
+            class="action-tile"
+            :to="tile.to"
+          >
+            <strong>{{ tile.title }}</strong>
+            <span>{{ tile.description }}</span>
           </router-link>
         </div>
       </el-card>
 
       <el-card shadow="never" class="soft-card">
-        <template #header>系统状态</template>
-        <el-skeleton :loading="loading" animated :rows="5">
+        <template #header>我的组织范围</template>
+        <el-skeleton :loading="loading" animated :rows="4">
           <template #default>
-            <div class="health-stack">
-              <div class="health-row">
-                <span>Embedding Health</span>
-                <el-tag :type="embeddingHealth?.status === 'ok' ? 'success' : 'danger'">
-                  {{ embeddingHealth?.status || 'unknown' }}
-                </el-tag>
-              </div>
-              <div class="health-row">
-                <span>Chat Health</span>
-                <el-tag :type="chatHealth?.status === 'ok' ? 'success' : 'danger'">
-                  {{ chatHealth?.status || 'unknown' }}
-                </el-tag>
-              </div>
-              <div class="health-row">
-                <span>Knowledge Spaces</span>
-                <el-tag type="success">{{ knowledgeSummary?.count ?? 0 }} 个空间</el-tag>
-              </div>
-              <div class="health-row">
-                <span>API Docs</span>
-                <el-tag type="success">/docs 已接入 Scalar</el-tag>
+            <div class="roadmap-boxes">
+              <div
+                v-for="membership in memberships"
+                :key="membership.id"
+                class="roadmap-box"
+              >
+                <strong>{{ membership.department_name }}</strong>
+                <span>{{ formatMembershipLabel(membership) }}</span>
               </div>
             </div>
           </template>
         </el-skeleton>
       </el-card>
     </section>
+
+    <section class="grid-two">
+      <el-card shadow="never" class="soft-card">
+        <template #header>我发起的事项</template>
+        <div class="roadmap-boxes">
+          <div class="roadmap-box">
+            <strong>{{ myRequestCount }} 条记录</strong>
+            <span>包括加入部门申请和知识空间共享申请，方便你持续跟进结果。</span>
+          </div>
+          <div class="roadmap-box">
+            <strong>{{ myJoinCount }} 条组织申请</strong>
+            <span>协作部门申请会影响你的可见部门范围。</span>
+          </div>
+          <div class="roadmap-box">
+            <strong>{{ myShareCount }} 条共享申请</strong>
+            <span>共享一旦通过，目标部门会立即获得对应知识空间的访问资格。</span>
+          </div>
+        </div>
+      </el-card>
+
+      <el-card shadow="never" class="soft-card">
+        <template #header>使用节奏建议</template>
+        <ul class="check-list">
+          <li>先从知识空间进入，再决定上传到哪里，不要从“全局上传”开始。</li>
+          <li>审批中心只看待办，不要在组织页里同时处理审批和治理。</li>
+          <li>跨部门复用资料时，先共享空间，再让对方检索和查看。</li>
+          <li>如果你有多个部门归属，先在顶部切到当前工作部门再继续操作。</li>
+        </ul>
+      </el-card>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.workspace-hero {
+  align-items: center;
+}
+</style>

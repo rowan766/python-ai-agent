@@ -6,7 +6,12 @@ import type {
   OrganizationStatus,
   RegisterPayload,
 } from '@/types/auth'
-import { clearAccessToken, getAccessToken, setAccessToken } from '@/utils/storage'
+import {
+  clearAccessToken,
+  clearActiveDepartmentId,
+  getAccessToken,
+  setAccessToken,
+} from '@/utils/storage'
 
 interface AuthState {
   token: string
@@ -47,6 +52,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       this.organizationStatus = 'pending_assignment'
       clearAccessToken()
+      clearActiveDepartmentId()
     },
     async ensureSession() {
       if (!this.initialized) {

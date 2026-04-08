@@ -2,8 +2,10 @@
 import { ArrowRight, Finished, Link, SwitchButton } from '@element-plus/icons-vue'
 import { buildApiUrl } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getPreferredMembership } from '@/utils/organization'
+import { setActiveDepartmentId } from '@/utils/storage'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,9 +16,32 @@ const breadcrumbs = computed(() =>
     .map((record) => record.meta?.title)
     .filter((title): title is string => typeof title === 'string' && title.length > 0),
 )
+const memberships = computed(() => authStore.user?.memberships ?? [])
+const selectedDepartmentId = ref<number | undefined>(undefined)
+const currentMembership = computed(
+  () =>
+    memberships.value.find((item) => item.department_id === selectedDepartmentId.value)
+    ?? getPreferredMembership(memberships.value),
+)
+
+watch(
+  memberships,
+  (items) => {
+    selectedDepartmentId.value = getPreferredMembership(items)?.department_id
+  },
+  { immediate: true },
+)
+
+watch(selectedDepartmentId, (value) => {
+  setActiveDepartmentId(value ?? null)
+})
 
 function openDocs() {
   window.open(buildApiUrl('/docs'), '_blank', 'noopener,noreferrer')
+}
+
+function goToOnboarding() {
+  void router.push('/onboarding')
 }
 
 function logout() {
@@ -39,14 +64,32 @@ function logout() {
     </div>
 
     <div class="app-header__actions">
-      <el-tag
-        :type="authStore.organizationReady ? 'success' : 'warning'"
-        effect="plain"
-        round
-      >
+      <el-tag :type="authStore.organizationReady ? 'success' : 'warning'" effect="plain" round>
         <el-icon><Finished /></el-icon>
         <span>{{ authStore.organizationReady ? '组织已接入' : '组织待接入' }}</span>
       </el-tag>
+
+      <el-select
+        v-if="authStore.organizationReady && memberships.length > 1"
+        v-model="selectedDepartmentId"
+        class="app-header__department"
+        placeholder="当前工作部门"
+      >
+        <el-option
+          v-for="membership in memberships"
+          :key="membership.department_id"
+          :label="membership.department_name"
+          :value="membership.department_id"
+        />
+      </el-select>
+
+      <div v-else-if="currentMembership" class="app-header__department-pill">
+        当前部门：{{ currentMembership.department_name }}
+      </div>
+
+      <el-button v-if="!authStore.organizationReady" type="primary" plain @click="goToOnboarding">
+        完成组织接入
+      </el-button>
 
       <el-button text @click="openDocs">
         <el-icon><Link /></el-icon>
@@ -96,7 +139,21 @@ function logout() {
 .app-header__actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 14px;
+}
+
+.app-header__department {
+  width: 220px;
+}
+
+.app-header__department-pill {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #4b5563;
+  font-size: 13px;
 }
 
 .app-header__profile {

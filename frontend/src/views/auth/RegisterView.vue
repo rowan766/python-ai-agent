@@ -32,8 +32,8 @@ async function handleSubmit() {
 
   try {
     await authStore.register(form)
-    ElMessage.success('注册成功，欢迎进入企业知识平台。')
-    await router.push('/workspace')
+    ElMessage.success('注册成功，接下来先完成组织接入。')
+    await router.push(authStore.organizationReady ? '/workspace' : '/onboarding')
   } catch (error) {
     ElMessage.error('注册失败，请确认邮箱或用户名是否已存在。')
     console.error(error)
@@ -47,14 +47,14 @@ async function handleSubmit() {
       <p class="register-page__eyebrow">Phase 1 Frontend</p>
       <h1>从账号体系开始，把企业级 RAG 平台真正搭起来。</h1>
       <p class="register-page__copy">
-        当前先联通认证与 RAG 能力，后续会逐步补入部门归属、知识库空间、共享治理和审批流。
+        注册完成后会直接进入组织接入流程，再开始配置知识空间、上传资料和处理审批。
       </p>
     </div>
 
     <div class="register-page__form-wrap">
       <div class="register-card">
         <h2>创建账号</h2>
-        <p>注册成功后会进入工作台，当前组织接入流程在下一阶段后端能力里落地。</p>
+        <p>注册成功后先加入组织，再进入知识空间和文档工作流。</p>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
           <el-form-item label="邮箱" prop="email">

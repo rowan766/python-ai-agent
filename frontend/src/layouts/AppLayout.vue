@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
-import { useAuthStore } from '@/stores/auth'
 import { getSidebarCollapsed, setSidebarCollapsed } from '@/utils/storage'
 import { computed, ref, watch } from 'vue'
 
-const authStore = useAuthStore()
 const isSidebarCollapsed = ref(getSidebarCollapsed())
 
 const sidebarWidth = computed(() => (isSidebarCollapsed.value ? '96px' : '288px'))
@@ -31,15 +29,6 @@ function toggleSidebar() {
       </el-header>
 
       <el-main class="app-shell__content">
-        <el-alert
-          v-if="!authStore.organizationReady"
-          class="app-shell__alert"
-          title="当前账号还没有完成组织接入。完成部门归属后，知识库空间、文档列表和权限过滤检索才会进入你的可见范围。"
-          type="warning"
-          :closable="false"
-          show-icon
-        />
-
         <router-view />
       </el-main>
     </el-container>
@@ -76,11 +65,6 @@ function toggleSidebar() {
 
 .app-shell__content {
   padding: 24px 32px 32px;
-}
-
-.app-shell__alert {
-  margin-bottom: 24px;
-  border-radius: 18px;
 }
 
 @media (max-width: 1200px) {

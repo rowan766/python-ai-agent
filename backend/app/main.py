@@ -2,6 +2,7 @@
 
 import logging
 import json
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -9,6 +10,7 @@ from contextlib import asynccontextmanager
 from app.api import chat, rag, auth, organization, knowledge
 from app import models as app_models
 from app.core.database import engine, Base
+from app.core.demo_seed import seed_demo_data
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -52,6 +54,8 @@ async def lifespan(app: FastAPI):
     # 启动时：自动创建数据库表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    if os.getenv("AUTO_SEED_DEMO_DATA", "").strip().lower() in {"1", "true", "yes"}:
+        await seed_demo_data()
     logger.info("API 文档已就绪: /docs")
     logger.info("本地访问地址: http://127.0.0.1:8000/docs 或 http://localhost:8000/docs")
     yield

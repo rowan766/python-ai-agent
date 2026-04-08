@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
   bootstrapFirstDepartment,
@@ -9,7 +10,9 @@ import {
   fetchMyDepartmentJoinRequests,
 } from '@/api/modules/organization'
 import type { DepartmentJoinRequestItem, DepartmentNode } from '@/types/organization'
+import { getPrimaryMembership } from '@/utils/organization'
 
+const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(false)
@@ -25,12 +28,13 @@ const bootstrapForm = reactive({
 
 const joinForm = reactive({
   target_department_id: undefined as number | undefined,
-  requested_role_code: 'department_member',
   reason: '',
 })
 
+const memberships = computed(() => authStore.user?.memberships ?? [])
 const hasDepartments = computed(() => departments.value.length > 0)
-const hasMemberships = computed(() => (authStore.user?.memberships?.length ?? 0) > 0)
+const hasMemberships = computed(() => memberships.value.length > 0)
+const primaryMembership = computed(() => getPrimaryMembership(memberships.value))
 
 async function loadData() {
   loading.value = true
@@ -43,7 +47,7 @@ async function loadData() {
     myRequests.value = requestResult.items
     await authStore.fetchCurrentUser()
   } catch (error) {
-    ElMessage.error('读取组织信息失败，请确认后端服务状态。')
+    ElMessage.error('读取组织接入信息失败，请确认后端服务状态。')
     console.error(error)
   } finally {
     loading.value = false
@@ -54,10 +58,10 @@ async function handleBootstrap() {
   submitting.value = true
   try {
     await bootstrapFirstDepartment(bootstrapForm)
-    ElMessage.success('首个部门初始化成功，你已成为默认负责人。')
+    ElMessage.success('首个部门已经创建完成，你现在是企业知识中心负责人。')
     await loadData()
   } catch (error) {
-    ElMessage.error('初始化首个部门失败，请检查编码是否重复。')
+    ElMessage.error('初始化首个部门失败，请检查部门编码是否重复。')
     console.error(error)
   } finally {
     submitting.value = false
@@ -66,12 +70,12 @@ async function handleBootstrap() {
 
 async function handleJoinRequest() {
   if (!joinForm.target_department_id) {
-    ElMessage.warning('请先选择目标部门。')
+    ElMessage.warning('请先选择要加入的部门。')
     return
   }
 
   if (!joinForm.reason.trim()) {
-    ElMessage.warning('请填写申请理由。')
+    ElMessage.warning('请补充你加入该部门后的职责说明。')
     return
   }
 
@@ -79,18 +83,22 @@ async function handleJoinRequest() {
   try {
     await createDepartmentJoinRequest({
       target_department_id: joinForm.target_department_id,
-      requested_role_code: joinForm.requested_role_code,
+      requested_role_code: 'department_member',
       reason: joinForm.reason.trim(),
     })
-    ElMessage.success('加入部门申请已提交。')
+    ElMessage.success('加入申请已提交，负责人审批后你就能进入正式工作台。')
     joinForm.reason = ''
     await loadData()
   } catch (error) {
-    ElMessage.error('申请提交失败，请确认是否已有待审批记录。')
+    ElMessage.error('提交申请失败，请确认是否已经有一条待审批记录。')
     console.error(error)
   } finally {
     submitting.value = false
   }
+}
+
+function goToWorkspace() {
+  void router.push('/workspace')
 }
 
 onMounted(() => {
@@ -100,41 +108,75 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <section class="hero-card">
+    <section class="hero-card onboarding-hero">
       <div>
-        <p class="page-eyebrow">Organization & RBAC</p>
-        <h2>组织接入页已经切到真实流程，后续继续扩展审批和范围权限。</h2>
+        <p class="page-eyebrow">Onboarding</p>
+        <h2>先完成组织接入，再进入知识空间、上传和审批工作流。</h2>
         <p class="page-copy">
-          这一版已经接通部门树、首个部门初始化、加入部门申请和我的申请记录。后续会继续补负责人审批、成员关系范围角色和知识空间授权。
+          你现在只需要完成一件事：明确自己属于哪个部门。系统会根据部门归属自动决定你可见的知识空间、文档范围和审批职责。
         </p>
       </div>
+      <div class="hero-card__summary">
+        <span>{{ hasMemberships ? '已接入' : '待接入' }}</span>
+        <small>
+          {{ hasMemberships ? `当前主归属：${primaryMembership?.department_name || '-'}` : '完成部门归属后继续' }}
+        </small>
+        <el-button v-if="hasMemberships" type="primary" @click="goToWorkspace">
+          进入工作台
+        </el-button>
+      </div>
+    </section>
 
-      <el-tag :type="hasMemberships ? 'success' : 'warning'" effect="dark" round>
-        {{ hasMemberships ? '组织已接入' : '待加入组织' }}
-      </el-tag>
+    <section class="stat-grid">
+      <el-card class="metric-card" shadow="hover">
+        <span class="metric-card__label">组织状态</span>
+        <strong>{{ hasMemberships ? '已加入组织' : '等待归属' }}</strong>
+        <p>决定你是否能进入正式知识流程。</p>
+      </el-card>
+      <el-card class="metric-card" shadow="hover">
+        <span class="metric-card__label">可选部门</span>
+        <strong>{{ departments.length }}</strong>
+        <p>系统里当前已经建立的部门数量。</p>
+      </el-card>
+      <el-card class="metric-card" shadow="hover">
+        <span class="metric-card__label">我的申请</span>
+        <strong>{{ myRequests.length }}</strong>
+        <p>这里会持续显示你发起过的接入申请。</p>
+      </el-card>
+      <el-card class="metric-card" shadow="hover">
+        <span class="metric-card__label">下一步</span>
+        <strong>{{ hasMemberships ? '开始使用' : hasDepartments ? '提交申请' : '初始化组织' }}</strong>
+        <p>流程只保留当前最重要的一步。</p>
+      </el-card>
     </section>
 
     <section class="grid-two">
       <el-card shadow="never" class="soft-card">
-        <template #header>当前组织状态</template>
+        <template #header>当前状态</template>
         <el-skeleton :loading="loading" animated :rows="5">
           <template #default>
             <div v-if="hasMemberships" class="roadmap-boxes">
               <div
-                v-for="membership in authStore.user?.memberships || []"
+                v-for="membership in memberships"
                 :key="membership.id"
                 class="roadmap-box"
               >
                 <strong>{{ membership.department_name }}</strong>
                 <span>
-                  {{ membership.membership_type }} / {{ membership.is_primary ? '主部门' : '协作部门' }}
+                  {{ membership.is_primary ? '主归属部门' : '协作部门' }} · 完成接入后可进入知识空间和文档流程
                 </span>
               </div>
             </div>
-            <el-empty
-              v-else
-              description="你还没有部门归属。可以先创建首个根部门，或向已有部门发起加入申请。"
-            />
+            <div v-else class="roadmap-boxes">
+              <div class="roadmap-box">
+                <strong>现在先完成部门归属</strong>
+                <span>系统不会要求你先理解共享、审批、知识空间等概念，只要先确定组织归属即可。</span>
+              </div>
+              <div class="roadmap-box">
+                <strong>通过后自动开启可见范围</strong>
+                <span>知识空间、文档和权限内检索会根据归属部门自动开放。</span>
+              </div>
+            </div>
           </template>
         </el-skeleton>
       </el-card>
@@ -142,10 +184,10 @@ onMounted(() => {
       <el-card shadow="never" class="soft-card">
         <template #header>我的申请记录</template>
         <el-table :data="myRequests" empty-text="还没有提交过申请" style="width: 100%">
-          <el-table-column prop="target_department_name" label="目标部门" min-width="140" />
-          <el-table-column prop="requested_role_code" label="申请角色" min-width="140" />
+          <el-table-column prop="target_department_name" label="目标部门" min-width="160" />
           <el-table-column prop="status" label="状态" width="120" />
-          <el-table-column prop="review_comment" label="审批意见" min-width="180" />
+          <el-table-column prop="reason" label="职责说明" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="review_comment" label="审批意见" min-width="180" show-overflow-tooltip />
         </el-table>
       </el-card>
     </section>
@@ -170,17 +212,17 @@ onMounted(() => {
       </el-card>
 
       <el-card shadow="never" class="soft-card">
-        <template #header>为什么要有这个入口</template>
+        <template #header>为什么先做这一步</template>
         <div class="roadmap-box">
-          <strong>企业级系统必须能自举</strong>
+          <strong>企业系统必须先有组织边界</strong>
           <span>
-            在还没有组织树时，系统需要一个干净的初始化入口，用于创建首个根部门并建立首位负责人，之后再逐步扩展成员、审批和知识空间。
+            当系统还没有任何部门时，需要一个干净的初始化入口来建立根部门和第一位负责人，后面的知识空间、共享和审批才能挂上去。
           </span>
         </div>
       </el-card>
     </section>
 
-    <section v-else class="grid-two">
+    <section v-else-if="!hasMemberships" class="grid-two">
       <el-card shadow="never" class="soft-card">
         <template #header>申请加入部门</template>
         <el-form label-position="top">
@@ -192,22 +234,15 @@ onMounted(() => {
               check-strictly
               default-expand-all
               :props="{ label: 'name', children: 'children', value: 'id' }"
-              placeholder="请选择要加入的部门"
+              placeholder="请选择你将要加入的部门"
             />
           </el-form-item>
-          <el-form-item label="申请角色">
-            <el-select v-model="joinForm.requested_role_code" placeholder="请选择申请角色">
-              <el-option label="部门成员" value="department_member" />
-              <el-option label="知识上传者" value="knowledge_operator" />
-              <el-option label="知识审核者" value="knowledge_reviewer" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="申请理由">
+          <el-form-item label="你会承担什么工作">
             <el-input
               v-model="joinForm.reason"
               type="textarea"
               :rows="4"
-              placeholder="请输入申请原因和计划承担的职责"
+              placeholder="例如：负责整理经营周报、维护产品知识空间和需求复盘资料"
             />
           </el-form-item>
           <el-button type="primary" :loading="submitting" @click="handleJoinRequest">
@@ -229,3 +264,9 @@ onMounted(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.onboarding-hero {
+  align-items: center;
+}
+</style>

@@ -32,6 +32,7 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => Boolean(state.token),
     organizationReady: (state) => state.organizationStatus === 'ready',
+    isPlatformAdmin: (state) => Boolean(state.user?.is_platform_admin),
     displayName: (state) => state.user?.username || state.user?.email || '未登录用户',
   },
   actions: {

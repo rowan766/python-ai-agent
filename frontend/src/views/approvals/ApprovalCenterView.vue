@@ -53,7 +53,7 @@ async function loadData() {
 async function handleApproveJoin(requestId: number) {
   try {
     const { value } = await ElMessageBox.prompt('可选填写审批意见', '通过组织申请', {
-      inputPlaceholder: '例如：通过，后续请把资料统一沉淀到产品空间',
+      inputPlaceholder: '审批意见',
       confirmButtonText: '通过',
       cancelButtonText: '取消',
     })
@@ -70,7 +70,7 @@ async function handleApproveJoin(requestId: number) {
 async function handleRejectJoin(requestId: number) {
   try {
     const { value } = await ElMessageBox.prompt('请输入驳回原因', '驳回组织申请', {
-      inputPlaceholder: '例如：当前阶段先不开放该协作范围',
+      inputPlaceholder: '驳回原因',
       confirmButtonText: '驳回',
       cancelButtonText: '取消',
     })
@@ -87,7 +87,7 @@ async function handleRejectJoin(requestId: number) {
 async function handleApproveShare(requestId: number) {
   try {
     const { value } = await ElMessageBox.prompt('可选填写审批意见', '通过共享申请', {
-      inputPlaceholder: '例如：同意纳入产品部门的可见范围',
+      inputPlaceholder: '审批意见',
       confirmButtonText: '通过',
       cancelButtonText: '取消',
     })
@@ -104,7 +104,7 @@ async function handleApproveShare(requestId: number) {
 async function handleRejectShare(requestId: number) {
   try {
     const { value } = await ElMessageBox.prompt('请输入驳回原因', '驳回共享申请', {
-      inputPlaceholder: '例如：当前阶段暂不向该部门开放这类资料',
+      inputPlaceholder: '驳回原因',
       confirmButtonText: '驳回',
       cancelButtonText: '取消',
     })
@@ -125,45 +125,38 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <section class="hero-card approvals-hero">
-      <div>
-        <p class="page-eyebrow">Approvals</p>
-        <h2>审批页只处理待办和申请记录，不再和组织治理混在一起。</h2>
-        <p class="page-copy">
-          你在这里看到的只有两类工作：组织加入审批和知识空间共享审批。处理完成后，相关可见范围会立刻在空间和文档页生效。
-        </p>
-      </div>
-      <div class="hero-card__summary">
-        <span>{{ pendingTotal }}</span>
-        <small>当前待处理审批</small>
+    <section class="page-toolbar">
+      <div class="page-toolbar__title">
+        <h2>审批中心</h2>
+        <span>待处理 {{ pendingTotal }} 条</span>
       </div>
     </section>
 
-    <section class="stat-grid">
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">待我处理</span>
-        <strong>{{ pendingTotal }}</strong>
-        <p>进入这页的首要目标就是把这些待办清空。</p>
+    <section class="summary-grid">
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">待我处理</span>
+        <strong class="summary-card__value">{{ pendingTotal }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">组织申请待办</span>
-        <strong>{{ pendingJoinItems.length }}</strong>
-        <p>会影响成员的部门归属和后续可见范围。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">组织申请</span>
+        <strong class="summary-card__value">{{ pendingJoinItems.length }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">共享申请待办</span>
-        <strong>{{ pendingShareItems.length }}</strong>
-        <p>会影响目标部门是否能看到对应知识空间。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">共享申请</span>
+        <strong class="summary-card__value">{{ pendingShareItems.length }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">我发起的事项</span>
-        <strong>{{ initiatedTotal }}</strong>
-        <p>方便回看自己发起过的组织和共享申请。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">我发起的事项</span>
+        <strong class="summary-card__value">{{ initiatedTotal }}</strong>
       </el-card>
     </section>
 
-    <el-card shadow="never" class="soft-card">
-      <template #header>审批中心</template>
+    <el-card class="table-card" shadow="never">
+      <template #header>
+        <div class="table-toolbar">
+          <strong>审批列表</strong>
+        </div>
+      </template>
       <el-skeleton :loading="loading" animated :rows="6">
         <template #default>
           <el-tabs>
@@ -177,7 +170,7 @@ onMounted(() => {
                     {{ formatRequestedRole(row.requested_role_code) }}
                   </template>
                 </el-table-column>
-                <el-table-column prop="reason" label="职责说明" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="reason" label="申请说明" min-width="220" show-overflow-tooltip />
                 <el-table-column label="操作" width="180" fixed="right">
                   <template #default="{ row }">
                     <el-button type="success" link @click="handleApproveJoin(row.id)">通过</el-button>
@@ -211,7 +204,7 @@ onMounted(() => {
                     {{ formatRequestedRole(row.requested_role_code) }}
                   </template>
                 </el-table-column>
-                <el-table-column prop="reason" label="职责说明" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="reason" label="申请说明" min-width="220" show-overflow-tooltip />
                 <el-table-column prop="status" label="状态" width="120" />
                 <el-table-column prop="review_comment" label="审批意见" min-width="180" show-overflow-tooltip />
               </el-table>
@@ -233,9 +226,3 @@ onMounted(() => {
     </el-card>
   </div>
 </template>
-
-<style scoped>
-.approvals-hero {
-  align-items: center;
-}
-</style>

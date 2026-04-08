@@ -2,6 +2,7 @@
 import type { AxiosError } from 'axios'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import {
   createKnowledgeBase,
   createKnowledgeBaseShareRequest,
@@ -17,7 +18,6 @@ import type {
   KnowledgeBaseItem,
   KnowledgeBaseShareItem,
 } from '@/types/knowledge'
-import { ElMessage } from 'element-plus'
 import { formatVisibilityScope, getPreferredMembership } from '@/utils/organization'
 
 const router = useRouter()
@@ -58,7 +58,7 @@ const shareForm = reactive({
 
 const visibilityOptions = [
   { label: '本部门可见', value: 'department_private' },
-  { label: '可以共享给相关部门', value: 'department_shared' },
+  { label: '共享后可见', value: 'department_shared' },
   { label: '全组织可见', value: 'org_public' },
 ]
 
@@ -126,6 +126,14 @@ function openUpload(item: KnowledgeBaseItem) {
   })
 }
 
+function getShareTargets(knowledgeBaseId: number): string {
+  const items = shareMap.value[knowledgeBaseId] ?? []
+  if (!items.length) {
+    return '--'
+  }
+  return items.map((item) => item.target_department_name).join('、')
+}
+
 async function handleCreateKnowledgeBase() {
   if (!createForm.department_id) {
     ElMessage.warning('请先选择归属部门。')
@@ -142,7 +150,7 @@ async function handleCreateKnowledgeBase() {
       ...createForm,
       name: createForm.name.trim(),
       code: createForm.code.trim(),
-      description: createForm.description?.trim() || '',
+      description: '',
     })
     ElMessage.success('知识空间创建成功。')
     createDialogVisible.value = false
@@ -175,7 +183,7 @@ async function handleCreateShareRequest() {
       target_department_id: shareForm.target_department_id,
       reason: shareForm.reason.trim(),
     })
-    ElMessage.success('共享申请已提交到目标部门审批。')
+    ElMessage.success('共享申请已提交。')
     shareDialogVisible.value = false
     await loadKnowledgeBases()
   } catch (error) {
@@ -197,118 +205,92 @@ watch(
   { immediate: true },
 )
 
-watch(selectedDepartmentId, () => {
-  void loadKnowledgeBases()
-}, { immediate: true })
+watch(
+  selectedDepartmentId,
+  () => {
+    void loadKnowledgeBases()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="page">
-    <section class="hero-card knowledge-hero">
-      <div>
-        <p class="page-eyebrow">Knowledge Spaces</p>
-        <h2>所有资料先进入明确的空间，再谈共享、审批和检索。</h2>
-        <p class="page-copy">
-          这里是知识工作的真正起点。先选当前工作部门，再进入对应空间看文档、上传资料或发起共享，不需要先理解全局治理结构。
-        </p>
+    <section class="page-toolbar">
+      <div class="page-toolbar__title">
+        <h2>知识空间</h2>
+        <span>当前部门：{{ preferredMembership?.department_name || '未设置' }}</span>
       </div>
-      <div class="hero-card__summary">
-        <span>{{ preferredMembership?.department_name || '未设置' }}</span>
-        <small>当前优先工作部门</small>
-        <el-button type="primary" @click="openCreateDialog">新建知识空间</el-button>
+      <div class="page-toolbar__actions">
+        <el-button @click="router.push('/documents')">文档中心</el-button>
+        <el-button type="primary" @click="openCreateDialog">新建空间</el-button>
       </div>
     </section>
 
-    <section class="stat-grid">
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">当前可见空间</span>
-        <strong>{{ knowledgeBases.length }}</strong>
-        <p>已自动按你的组织归属和共享范围过滤。</p>
+    <section class="summary-grid">
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">当前可见空间</span>
+        <strong class="summary-card__value">{{ knowledgeBases.length }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">空间内文档</span>
-        <strong>{{ visibleDocumentCount }}</strong>
-        <p>当前列表中这些空间包含的文档总数。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">空间内文档</span>
+        <strong class="summary-card__value">{{ visibleDocumentCount }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">已生效共享</span>
-        <strong>{{ activeShareCount }}</strong>
-        <p>已经开放给其他部门使用的共享关系数量。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">已生效共享</span>
+        <strong class="summary-card__value">{{ activeShareCount }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">我发起的共享</span>
-        <strong>{{ myShareRequestCount }}</strong>
-        <p>方便继续跟进跨部门协作的审批状态。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">我发起的共享</span>
+        <strong class="summary-card__value">{{ myShareRequestCount }}</strong>
       </el-card>
     </section>
 
-    <el-card shadow="never" class="soft-card">
+    <el-card class="table-card" shadow="never">
       <template #header>
-        <div class="section-head">
+        <div class="table-toolbar">
           <strong>空间列表</strong>
-          <el-select
-            v-model="selectedDepartmentId"
-            clearable
-            placeholder="按部门筛选"
-            class="section-head__select"
-          >
-            <el-option
-              v-for="membership in memberships"
-              :key="membership.department_id"
-              :label="membership.department_name"
-              :value="membership.department_id"
-            />
-          </el-select>
+          <div class="table-toolbar__filters">
+            <el-select
+              v-model="selectedDepartmentId"
+              clearable
+              placeholder="按部门筛选"
+              class="toolbar-select"
+            >
+              <el-option
+                v-for="membership in memberships"
+                :key="membership.department_id"
+                :label="membership.department_name"
+                :value="membership.department_id"
+              />
+            </el-select>
+          </div>
         </div>
       </template>
 
-      <el-skeleton v-if="loading" :rows="6" animated />
-
-      <el-empty
-        v-else-if="!knowledgeBases.length"
-        description="当前范围内还没有知识空间。你可以先创建一个空间，再从那里开始上传资料。"
-      />
-
-      <div v-else class="kb-grid">
-        <article v-for="item in knowledgeBases" :key="item.id" class="kb-card">
-          <div class="kb-card__top">
-            <div>
-              <strong>{{ item.name }}</strong>
-              <p>{{ item.description || '这个空间还没有补充说明。' }}</p>
-            </div>
-            <el-tag round>{{ formatVisibilityScope(item.visibility_scope) }}</el-tag>
-          </div>
-
-          <div class="kb-card__meta">
-            <span>归属部门：{{ item.department_name }}</span>
-            <span>空间编码：{{ item.code }}</span>
-            <span>文档数：{{ item.document_count }}</span>
-          </div>
-
-          <div class="kb-card__actions">
-            <el-button type="primary" plain @click="openDocuments(item)">查看文档</el-button>
-            <el-button plain @click="openUpload(item)">上传到这里</el-button>
-            <el-button link type="primary" @click="openShareDialog(item)">发起共享</el-button>
-          </div>
-
-          <div class="kb-card__share">
-            <div class="kb-card__share-head">
-              <span>已共享给</span>
-            </div>
-            <div v-if="shareMap[item.id]?.length" class="kb-card__share-tags">
-              <el-tag
-                v-for="share in shareMap[item.id]"
-                :key="share.id"
-                type="success"
-                round
-              >
-                {{ share.target_department_name }}
-              </el-tag>
-            </div>
-            <span v-else class="kb-card__share-empty">当前还没有生效的共享目标部门。</span>
-          </div>
-        </article>
-      </div>
+      <el-table v-loading="loading" :data="knowledgeBases" stripe empty-text="当前没有知识空间">
+        <el-table-column prop="name" label="空间名称" min-width="180" />
+        <el-table-column prop="code" label="空间编码" min-width="160" />
+        <el-table-column prop="department_name" label="归属部门" min-width="140" />
+        <el-table-column prop="document_count" label="文档数" width="100" />
+        <el-table-column label="可见范围" min-width="140">
+          <template #default="{ row }">
+            {{ formatVisibilityScope(row.visibility_scope) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="已共享给" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ getShareTargets(row.id) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="240" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" text @click="openDocuments(row)">文档</el-button>
+            <el-button text @click="openUpload(row)">上传</el-button>
+            <el-button text @click="openShareDialog(row)">共享</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-card>
 
     <el-dialog v-model="createDialogVisible" title="新建知识空间" width="520px">
@@ -324,18 +306,10 @@ watch(selectedDepartmentId, () => {
           </el-select>
         </el-form-item>
         <el-form-item label="空间名称">
-          <el-input v-model="createForm.name" placeholder="例如：产品运营作战室" />
+          <el-input v-model="createForm.name" placeholder="例如：产品运营资料库" />
         </el-form-item>
         <el-form-item label="空间编码">
-          <el-input v-model="createForm.code" placeholder="例如：product-playbook" />
-        </el-form-item>
-        <el-form-item label="空间说明">
-          <el-input
-            v-model="createForm.description"
-            type="textarea"
-            :rows="3"
-            placeholder="描述这个空间承载的知识范围和适用场景"
-          />
+          <el-input v-model="createForm.code" placeholder="例如：product-ops" />
         </el-form-item>
         <el-form-item label="默认可见范围">
           <el-radio-group v-model="createForm.visibility_scope">
@@ -353,7 +327,7 @@ watch(selectedDepartmentId, () => {
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="submitting" @click="handleCreateKnowledgeBase">
-          创建空间
+          创建
         </el-button>
       </template>
     </el-dialog>
@@ -371,7 +345,7 @@ watch(selectedDepartmentId, () => {
             check-strictly
             default-expand-all
             :props="{ label: 'name', children: 'children', value: 'id' }"
-            placeholder="请选择共享目标部门"
+            placeholder="请选择目标部门"
           />
         </el-form-item>
         <el-form-item label="共享原因">
@@ -379,7 +353,7 @@ watch(selectedDepartmentId, () => {
             v-model="shareForm.reason"
             type="textarea"
             :rows="4"
-            placeholder="说明为什么要把这个空间开放给目标部门"
+            placeholder="说明本次共享目的"
           />
         </el-form-item>
       </el-form>
@@ -387,7 +361,7 @@ watch(selectedDepartmentId, () => {
       <template #footer>
         <el-button @click="shareDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="shareSubmitting" @click="handleCreateShareRequest">
-          提交共享申请
+          提交
         </el-button>
       </template>
     </el-dialog>
@@ -395,103 +369,12 @@ watch(selectedDepartmentId, () => {
 </template>
 
 <style scoped>
-.knowledge-hero {
-  align-items: center;
-}
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.section-head strong {
-  color: var(--page-green-deep);
-}
-
-.section-head__select {
+.toolbar-select {
   width: 220px;
 }
 
-.kb-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.kb-card {
-  border: 1px solid rgba(24, 54, 48, 0.1);
-  border-radius: 22px;
-  padding: 20px;
-  background: rgba(255, 253, 248, 0.94);
-}
-
-.kb-card__top {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.kb-card__top strong {
-  display: block;
-  color: var(--page-green-deep);
-  font-size: 20px;
-}
-
-.kb-card__top p {
-  margin: 10px 0 0;
-  color: var(--page-muted);
-  line-height: 1.7;
-}
-
-.kb-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 16px;
-  color: var(--page-muted);
-  font-size: 13px;
-}
-
-.kb-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.kb-card__share {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px dashed rgba(24, 54, 48, 0.12);
-}
-
-.kb-card__share-head {
-  color: var(--page-muted);
-  font-size: 13px;
-}
-
-.kb-card__share-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.kb-card__share-empty {
-  display: block;
-  margin-top: 12px;
-  color: var(--page-muted);
-  font-size: 13px;
-}
-
 @media (max-width: 960px) {
-  .section-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .section-head__select {
+  .toolbar-select {
     width: 100%;
   }
 }

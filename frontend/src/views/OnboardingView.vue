@@ -58,7 +58,7 @@ async function handleBootstrap() {
   submitting.value = true
   try {
     await bootstrapFirstDepartment(bootstrapForm)
-    ElMessage.success('首个部门已经创建完成，你现在是企业知识中心负责人。')
+    ElMessage.success('首个部门创建完成。')
     await loadData()
   } catch (error) {
     ElMessage.error('初始化首个部门失败，请检查部门编码是否重复。')
@@ -75,7 +75,7 @@ async function handleJoinRequest() {
   }
 
   if (!joinForm.reason.trim()) {
-    ElMessage.warning('请补充你加入该部门后的职责说明。')
+    ElMessage.warning('请补充申请说明。')
     return
   }
 
@@ -86,7 +86,7 @@ async function handleJoinRequest() {
       requested_role_code: 'department_member',
       reason: joinForm.reason.trim(),
     })
-    ElMessage.success('加入申请已提交，负责人审批后你就能进入正式工作台。')
+    ElMessage.success('加入申请已提交。')
     joinForm.reason = ''
     await loadData()
   } catch (error) {
@@ -108,123 +108,118 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <section class="hero-card onboarding-hero">
-      <div>
-        <p class="page-eyebrow">Onboarding</p>
-        <h2>先完成组织接入，再进入知识空间、上传和审批工作流。</h2>
-        <p class="page-copy">
-          你现在只需要完成一件事：明确自己属于哪个部门。系统会根据部门归属自动决定你可见的知识空间、文档范围和审批职责。
-        </p>
+    <section class="page-toolbar">
+      <div class="page-toolbar__title">
+        <h2>组织接入</h2>
+        <span>{{ hasMemberships ? '已完成接入' : '待完成接入' }}</span>
       </div>
-      <div class="hero-card__summary">
-        <span>{{ hasMemberships ? '已接入' : '待接入' }}</span>
-        <small>
-          {{ hasMemberships ? `当前主归属：${primaryMembership?.department_name || '-'}` : '完成部门归属后继续' }}
-        </small>
+      <div class="page-toolbar__actions">
         <el-button v-if="hasMemberships" type="primary" @click="goToWorkspace">
           进入工作台
         </el-button>
       </div>
     </section>
 
-    <section class="stat-grid">
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">组织状态</span>
-        <strong>{{ hasMemberships ? '已加入组织' : '等待归属' }}</strong>
-        <p>决定你是否能进入正式知识流程。</p>
+    <section class="summary-grid">
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">组织状态</span>
+        <strong class="summary-card__value">{{ hasMemberships ? '已加入' : '待归属' }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">可选部门</span>
-        <strong>{{ departments.length }}</strong>
-        <p>系统里当前已经建立的部门数量。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">可选部门</span>
+        <strong class="summary-card__value">{{ departments.length }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">我的申请</span>
-        <strong>{{ myRequests.length }}</strong>
-        <p>这里会持续显示你发起过的接入申请。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">我的申请</span>
+        <strong class="summary-card__value">{{ myRequests.length }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">下一步</span>
-        <strong>{{ hasMemberships ? '开始使用' : hasDepartments ? '提交申请' : '初始化组织' }}</strong>
-        <p>流程只保留当前最重要的一步。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">主归属</span>
+        <strong class="summary-card__value">{{ primaryMembership?.department_name || '--' }}</strong>
       </el-card>
     </section>
 
-    <section class="grid-two">
-      <el-card shadow="never" class="soft-card">
-        <template #header>当前状态</template>
-        <el-skeleton :loading="loading" animated :rows="5">
-          <template #default>
-            <div v-if="hasMemberships" class="roadmap-boxes">
-              <div
-                v-for="membership in memberships"
-                :key="membership.id"
-                class="roadmap-box"
-              >
-                <strong>{{ membership.department_name }}</strong>
-                <span>
-                  {{ membership.is_primary ? '主归属部门' : '协作部门' }} · 完成接入后可进入知识空间和文档流程
-                </span>
-              </div>
-            </div>
-            <div v-else class="roadmap-boxes">
-              <div class="roadmap-box">
-                <strong>现在先完成部门归属</strong>
-                <span>系统不会要求你先理解共享、审批、知识空间等概念，只要先确定组织归属即可。</span>
-              </div>
-              <div class="roadmap-box">
-                <strong>通过后自动开启可见范围</strong>
-                <span>知识空间、文档和权限内检索会根据归属部门自动开放。</span>
-              </div>
-            </div>
-          </template>
-        </el-skeleton>
+    <section v-if="hasMemberships" class="split-grid">
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>当前归属</strong>
+          </div>
+        </template>
+        <el-table v-loading="loading" :data="memberships" stripe>
+          <el-table-column prop="department_name" label="部门" min-width="180" />
+          <el-table-column label="关系" min-width="120">
+            <template #default="{ row }">
+              {{ row.is_primary ? '主归属部门' : '协作部门' }}
+            </template>
+          </el-table-column>
+        </el-table>
       </el-card>
 
-      <el-card shadow="never" class="soft-card">
-        <template #header>我的申请记录</template>
-        <el-table :data="myRequests" empty-text="还没有提交过申请" style="width: 100%">
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>我的申请记录</strong>
+          </div>
+        </template>
+        <el-table v-loading="loading" :data="myRequests" stripe empty-text="还没有提交过申请">
           <el-table-column prop="target_department_name" label="目标部门" min-width="160" />
           <el-table-column prop="status" label="状态" width="120" />
-          <el-table-column prop="reason" label="职责说明" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="reason" label="申请说明" min-width="220" show-overflow-tooltip />
           <el-table-column prop="review_comment" label="审批意见" min-width="180" show-overflow-tooltip />
         </el-table>
       </el-card>
     </section>
 
-    <section v-if="!hasDepartments" class="grid-two">
-      <el-card shadow="never" class="soft-card">
-        <template #header>初始化首个部门</template>
+    <section v-else-if="!hasDepartments" class="split-grid">
+      <el-card class="form-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>初始化首个部门</strong>
+          </div>
+        </template>
         <el-form label-position="top">
           <el-form-item label="部门编码">
-            <el-input v-model="bootstrapForm.code" placeholder="例如 dept-root" />
+            <el-input v-model="bootstrapForm.code" />
           </el-form-item>
           <el-form-item label="部门名称">
-            <el-input v-model="bootstrapForm.name" placeholder="例如 企业知识中心" />
+            <el-input v-model="bootstrapForm.name" />
           </el-form-item>
           <el-form-item label="部门全称">
-            <el-input v-model="bootstrapForm.full_name" placeholder="例如 企业知识中心" />
+            <el-input v-model="bootstrapForm.full_name" />
           </el-form-item>
           <el-button type="primary" :loading="submitting" @click="handleBootstrap">
-            创建首个部门并设我为负责人
+            创建首个部门
           </el-button>
         </el-form>
       </el-card>
 
-      <el-card shadow="never" class="soft-card">
-        <template #header>为什么先做这一步</template>
-        <div class="roadmap-box">
-          <strong>企业系统必须先有组织边界</strong>
-          <span>
-            当系统还没有任何部门时，需要一个干净的初始化入口来建立根部门和第一位负责人，后面的知识空间、共享和审批才能挂上去。
-          </span>
+      <el-card class="panel-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>当前状态</strong>
+          </div>
+        </template>
+        <div class="compact-stack">
+          <div class="compact-row">
+            <span>系统部门数</span>
+            <strong>0</strong>
+          </div>
+          <div class="compact-row">
+            <span>下一步</span>
+            <strong>创建首个部门</strong>
+          </div>
         </div>
       </el-card>
     </section>
 
-    <section v-else-if="!hasMemberships" class="grid-two">
-      <el-card shadow="never" class="soft-card">
-        <template #header>申请加入部门</template>
+    <section v-else class="split-grid">
+      <el-card class="form-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>申请加入部门</strong>
+          </div>
+        </template>
         <el-form label-position="top">
           <el-form-item label="目标部门">
             <el-tree-select
@@ -234,39 +229,36 @@ onMounted(() => {
               check-strictly
               default-expand-all
               :props="{ label: 'name', children: 'children', value: 'id' }"
-              placeholder="请选择你将要加入的部门"
+              placeholder="请选择部门"
             />
           </el-form-item>
-          <el-form-item label="你会承担什么工作">
+          <el-form-item label="申请说明">
             <el-input
               v-model="joinForm.reason"
               type="textarea"
               :rows="4"
-              placeholder="例如：负责整理经营周报、维护产品知识空间和需求复盘资料"
+              placeholder="说明你的工作职责"
             />
           </el-form-item>
           <el-button type="primary" :loading="submitting" @click="handleJoinRequest">
-            提交加入申请
+            提交申请
           </el-button>
         </el-form>
       </el-card>
 
-      <el-card shadow="never" class="soft-card">
-        <template #header>当前部门树</template>
-        <el-tree
-          :data="departments"
-          node-key="id"
-          default-expand-all
-          :props="{ label: 'name', children: 'children' }"
-          empty-text="暂无部门"
-        />
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>我的申请记录</strong>
+          </div>
+        </template>
+        <el-table v-loading="loading" :data="myRequests" stripe empty-text="还没有提交过申请">
+          <el-table-column prop="target_department_name" label="目标部门" min-width="160" />
+          <el-table-column prop="status" label="状态" width="120" />
+          <el-table-column prop="reason" label="申请说明" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="review_comment" label="审批意见" min-width="180" show-overflow-tooltip />
+        </el-table>
       </el-card>
     </section>
   </div>
 </template>
-
-<style scoped>
-.onboarding-hero {
-  align-items: center;
-}
-</style>

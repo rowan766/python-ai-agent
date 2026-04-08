@@ -12,6 +12,8 @@ export interface AuthUser {
   id: number
   email: string
   username: string
+  is_active: boolean
+  is_platform_admin: boolean
   organization_status: OrganizationStatus
   memberships: MembershipSummary[]
 }

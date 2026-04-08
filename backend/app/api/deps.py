@@ -16,7 +16,9 @@ security = HTTPBearer()
 
 def get_platform_admin_emails() -> set[str]:
     raw_value = os.getenv("PLATFORM_ADMIN_EMAILS", "")
-    return {item.strip().lower() for item in raw_value.split(",") if item.strip()}
+    if raw_value.strip():
+        return {item.strip().lower() for item in raw_value.split(",") if item.strip()}
+    return {"admin.demo@example.com"}
 
 
 def is_platform_admin(user: User) -> bool:

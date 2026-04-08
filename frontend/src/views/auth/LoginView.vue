@@ -29,6 +29,7 @@ const submittingReset = ref(false)
 const resendCountdown = ref(0)
 const demoAccounts = import.meta.env.DEV
   ? [
+      { label: '平台管理员', account: 'demo_admin', password: 'Password123!' },
       { label: '产品负责人', account: 'demo_lena', password: 'Password123!' },
       { label: '研发负责人', account: 'demo_chen', password: 'Password123!' },
       { label: '待入职成员', account: 'demo_jack', password: 'Password123!' },

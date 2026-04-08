@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios'
 import { Delete, Download, UploadFilled } from '@element-plus/icons-vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteKnowledgeDocument,
   downloadKnowledgeDocument,
@@ -11,7 +12,6 @@ import {
 } from '@/api/modules/knowledge'
 import { useAuthStore } from '@/stores/auth'
 import type { KnowledgeBaseItem, KnowledgeDocumentItem } from '@/types/knowledge'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatVisibilityScope, getPreferredMembership } from '@/utils/organization'
 
 const route = useRoute()
@@ -27,7 +27,9 @@ const memberships = computed(() => authStore.user?.memberships ?? [])
 const preferredMembership = computed(() => getPreferredMembership(memberships.value))
 const selectedKnowledgeBaseId = ref<number | undefined>(undefined)
 const selectedDepartmentId = ref<number | undefined>(preferredMembership.value?.department_id)
-const downloadableCount = computed(() => documents.value.filter((item) => item.download_available).length)
+const downloadableCount = computed(() =>
+  documents.value.filter((item) => item.download_available).length,
+)
 const deletableCount = computed(() => documents.value.filter((item) => item.can_delete).length)
 
 function syncFromRoute() {
@@ -61,7 +63,9 @@ async function loadDocuments() {
 function openUpload() {
   void router.push({
     name: 'document-upload',
-    query: selectedKnowledgeBaseId.value ? { knowledgeBaseId: String(selectedKnowledgeBaseId.value) } : undefined,
+    query: selectedKnowledgeBaseId.value
+      ? { knowledgeBaseId: String(selectedKnowledgeBaseId.value) }
+      : undefined,
   })
 }
 
@@ -126,62 +130,64 @@ watch(
   },
 )
 
-watch([selectedKnowledgeBaseId, selectedDepartmentId], () => {
-  void loadDocuments()
-}, { immediate: true })
+watch(
+  [selectedKnowledgeBaseId, selectedDepartmentId],
+  () => {
+    void loadDocuments()
+  },
+  { immediate: true },
+)
 
 syncFromRoute()
 </script>
 
 <template>
   <div class="page">
-    <section class="hero-card document-hero">
-      <div>
-        <p class="page-eyebrow">Documents</p>
-        <h2>文档页只负责浏览、下载和清理，不再把空间创建和上传塞进同一页。</h2>
-        <p class="page-copy">
-          先筛到当前工作部门或指定空间，再处理文档清单。上传动作已经独立到单独页面，减少理解成本。
-        </p>
+    <section class="page-toolbar">
+      <div class="page-toolbar__title">
+        <h2>文档中心</h2>
+        <span>当前部门：{{ preferredMembership?.department_name || '未设置' }}</span>
       </div>
-      <div class="document-hero__actions">
-        <el-button plain @click="router.push('/knowledge-bases')">返回知识空间</el-button>
+      <div class="page-toolbar__actions">
+        <el-button @click="router.push('/knowledge-bases')">知识空间</el-button>
         <el-button type="primary" :icon="UploadFilled" @click="openUpload">上传文档</el-button>
       </div>
     </section>
 
-    <section class="stat-grid">
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">当前列表文档</span>
-        <strong>{{ documents.length }}</strong>
-        <p>已按当前筛选范围收敛到和你操作有关的文档。</p>
+    <section class="summary-grid">
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">当前列表文档</span>
+        <strong class="summary-card__value">{{ documents.length }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">可下载文档</span>
-        <strong>{{ downloadableCount }}</strong>
-        <p>具备原始文件下载能力的文档数量。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">可下载文档</span>
+        <strong class="summary-card__value">{{ downloadableCount }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">可删除文档</span>
-        <strong>{{ deletableCount }}</strong>
-        <p>当前账号有权限清理的文档数量。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">可删除文档</span>
+        <strong class="summary-card__value">{{ deletableCount }}</strong>
       </el-card>
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">默认工作部门</span>
-        <strong>{{ preferredMembership?.department_name || '--' }}</strong>
-        <p>顶部切换工作部门后，这里的默认筛选也会随之变化。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">当前知识空间</span>
+        <strong class="summary-card__value">
+          {{
+            knowledgeBases.find((item) => item.id === selectedKnowledgeBaseId)?.name
+            || '全部空间'
+          }}
+        </strong>
       </el-card>
     </section>
 
-    <el-card shadow="never" class="soft-card">
+    <el-card class="table-card" shadow="never">
       <template #header>
-        <div class="table-header">
+        <div class="table-toolbar">
           <strong>文档清单</strong>
-          <div class="table-header__actions">
+          <div class="table-toolbar__filters">
             <el-select
               v-model="selectedDepartmentId"
               clearable
               placeholder="按部门筛选"
-              class="table-header__select"
+              class="toolbar-select"
             >
               <el-option
                 v-for="membership in memberships"
@@ -194,7 +200,7 @@ syncFromRoute()
               v-model="selectedKnowledgeBaseId"
               clearable
               placeholder="按知识空间筛选"
-              class="table-header__select"
+              class="toolbar-select"
             >
               <el-option
                 v-for="item in knowledgeBases"
@@ -207,8 +213,9 @@ syncFromRoute()
         </div>
       </template>
 
-      <el-table v-loading="loading" :data="documents" stripe>
+      <el-table v-loading="loading" :data="documents" stripe empty-text="当前没有文档">
         <el-table-column prop="title" label="文档标题" min-width="220" />
+        <el-table-column prop="filename" label="文件名" min-width="200" show-overflow-tooltip />
         <el-table-column prop="knowledge_base_name" label="知识空间" min-width="180" />
         <el-table-column prop="department_name" label="归属部门" min-width="140" />
         <el-table-column prop="uploader_username" label="上传人" min-width="120" />
@@ -244,50 +251,17 @@ syncFromRoute()
           </template>
         </el-table-column>
       </el-table>
-
-      <el-empty
-        v-if="!loading && !documents.length"
-        description="当前筛选范围内还没有文档。你可以先进入上传页，把资料投递到某个知识空间。"
-      />
     </el-card>
   </div>
 </template>
 
 <style scoped>
-.document-hero {
-  align-items: center;
-}
-
-.document-hero__actions,
-.table-header__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.table-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.table-header strong {
-  color: var(--page-green-deep);
-}
-
-.table-header__select {
+.toolbar-select {
   width: 220px;
 }
 
 @media (max-width: 960px) {
-  .document-hero,
-  .table-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .table-header__select {
+  .toolbar-select {
     width: 100%;
   }
 }

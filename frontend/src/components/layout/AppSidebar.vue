@@ -9,6 +9,7 @@ import {
   Search,
   Finished,
   UploadFilled,
+  UserFilled,
 } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -37,7 +38,7 @@ const menuItems = computed<MenuItem[]>(() => {
     return [{ label: '组织接入', path: '/onboarding', icon: OfficeBuilding }]
   }
 
-  return [
+  const items: MenuItem[] = [
     { label: '工作台', path: '/workspace', icon: HomeFilled },
     { label: '知识空间', path: '/knowledge-bases', icon: Files },
     { label: '文档中心', path: '/documents', icon: Files },
@@ -47,6 +48,12 @@ const menuItems = computed<MenuItem[]>(() => {
     { label: '审批中心', path: '/approvals', icon: Finished },
     { label: '组织与部门', path: '/organization', icon: OfficeBuilding },
   ]
+
+  if (authStore.isPlatformAdmin) {
+    items.push({ label: '用户管理', path: '/users', icon: UserFilled })
+  }
+
+  return items
 })
 
 const activePath = computed(() => String(route.meta.navKey ?? route.path))
@@ -95,10 +102,8 @@ function handleSelect(path: string) {
   flex-direction: column;
   gap: 20px;
   padding: 20px 14px;
-  background:
-    radial-gradient(circle at top, rgba(240, 198, 112, 0.18), transparent 34%),
-    linear-gradient(180deg, #1b6b56 0%, #123e35 58%, #102c27 100%);
-  color: #f6f1e8;
+  background: #ffffff;
+  color: #111827;
 }
 
 .sidebar__brand {
@@ -121,19 +126,18 @@ function handleSelect(path: string) {
   height: 40px;
   width: 40px;
   place-items: center;
-  border-radius: 12px;
-  background: rgba(255, 248, 232, 0.14);
-  color: #fff6dd;
+  border-radius: 10px;
+  background: #409eff;
+  color: #ffffff;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .sidebar__title {
   font-size: 16px;
   font-weight: 700;
-  color: #fffaf0;
+  color: #111827;
   white-space: nowrap;
 }
 
@@ -143,16 +147,16 @@ function handleSelect(path: string) {
   width: 34px;
   flex-shrink: 0;
   place-items: center;
-  border: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
-  background: rgba(255, 248, 232, 0.12);
-  color: #fff6dd;
+  background: #ffffff;
+  color: #6b7280;
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .sidebar__toggle:hover {
-  background: rgba(255, 248, 232, 0.2);
+  background: #f5f7fa;
   transform: translateY(-1px);
 }
 
@@ -169,9 +173,10 @@ function handleSelect(path: string) {
   height: auto;
   min-height: 48px;
   margin-bottom: 8px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(246, 241, 232, 0.94);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #4b5563;
   line-height: 1.3;
   padding-top: 10px;
   padding-bottom: 10px;
@@ -189,14 +194,15 @@ function handleSelect(path: string) {
 }
 
 :deep(.sidebar__menu .el-menu-item.is-active) {
-  background: rgba(255, 248, 232, 0.16);
-  color: #fffdf7;
-  box-shadow: inset 0 0 0 1px rgba(255, 248, 232, 0.08);
+  border-color: rgba(64, 158, 255, 0.25);
+  background: #ecf5ff;
+  color: #409eff;
+  box-shadow: none;
 }
 
 :deep(.sidebar__menu .el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateX(2px);
+  background: #f5f7fa;
+  transform: none;
 }
 
 .sidebar__label {

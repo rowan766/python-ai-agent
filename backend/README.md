@@ -6,6 +6,7 @@ FastAPI backend for the Enterprise RAG project.
 
 ```bash
 cd backend
+.\.venv\Scripts\Activate.ps1
 uv sync
 uv run uvicorn app.main:app --reload --port 8000
 ```

@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchKnowledgeBases, fetchKnowledgeDocuments, fetchMyKnowledgeBaseShareRequests, fetchPendingKnowledgeBaseShareRequests } from '@/api/modules/knowledge'
-import { fetchMyDepartmentJoinRequests, fetchPendingDepartmentJoinRequests } from '@/api/modules/organization'
+import { useRouter } from 'vue-router'
+import {
+  fetchKnowledgeBases,
+  fetchKnowledgeDocuments,
+  fetchMyKnowledgeBaseShareRequests,
+  fetchPendingKnowledgeBaseShareRequests,
+} from '@/api/modules/knowledge'
+import {
+  fetchMyDepartmentJoinRequests,
+  fetchPendingDepartmentJoinRequests,
+} from '@/api/modules/organization'
 import { useAuthStore } from '@/stores/auth'
 import { formatMembershipLabel, getPreferredMembership } from '@/utils/organization'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const loading = ref(false)
 const knowledgeBaseCount = ref(0)
@@ -20,29 +30,21 @@ const currentMembership = computed(() => getPreferredMembership(memberships.valu
 const pendingApprovalCount = computed(() => pendingJoinCount.value + pendingShareCount.value)
 const myRequestCount = computed(() => myJoinCount.value + myShareCount.value)
 
-const actionTiles = computed(() => [
-  {
-    title: '进入知识空间',
-    description: '先从你当前可访问的空间开始浏览和治理资料。',
-    to: '/knowledge-bases',
-  },
-  {
-    title: '上传新文档',
-    description: '上传入口已经独立出来，只做一件事。',
-    to: '/documents/upload',
-  },
-  {
-    title: '查看审批待办',
-    description: pendingApprovalCount.value
-      ? `你当前还有 ${pendingApprovalCount.value} 条待处理审批。`
-      : '当前没有待处理审批，适合继续整理知识资产。',
-    to: '/approvals',
-  },
-  {
-    title: '开始知识检索',
-    description: '在权限范围内直接搜索文档片段和知识来源。',
-    to: '/knowledge/search',
-  },
+const quickActions = [
+  { label: '进入知识空间', path: '/knowledge-bases' },
+  { label: '上传文档', path: '/documents/upload' },
+  { label: '知识检索', path: '/knowledge/search' },
+  { label: '审批中心', path: '/approvals' },
+]
+
+const pendingRows = computed(() => [
+  { label: '组织申请待办', count: pendingJoinCount.value, path: '/approvals' },
+  { label: '共享申请待办', count: pendingShareCount.value, path: '/approvals' },
+])
+
+const initiatedRows = computed(() => [
+  { label: '我发起的组织申请', count: myJoinCount.value, path: '/approvals' },
+  { label: '我发起的共享申请', count: myShareCount.value, path: '/approvals' },
 ])
 
 async function loadWorkspace() {
@@ -64,15 +66,22 @@ async function loadWorkspace() {
       fetchMyKnowledgeBaseShareRequests(),
     ])
 
-    knowledgeBaseCount.value = knowledgeBaseResult.status === 'fulfilled' ? knowledgeBaseResult.value.count : 0
+    knowledgeBaseCount.value =
+      knowledgeBaseResult.status === 'fulfilled' ? knowledgeBaseResult.value.count : 0
     documentCount.value = documentResult.status === 'fulfilled' ? documentResult.value.count : 0
-    pendingJoinCount.value = pendingJoinResult.status === 'fulfilled' ? pendingJoinResult.value.count : 0
-    pendingShareCount.value = pendingShareResult.status === 'fulfilled' ? pendingShareResult.value.count : 0
+    pendingJoinCount.value =
+      pendingJoinResult.status === 'fulfilled' ? pendingJoinResult.value.count : 0
+    pendingShareCount.value =
+      pendingShareResult.status === 'fulfilled' ? pendingShareResult.value.count : 0
     myJoinCount.value = myJoinResult.status === 'fulfilled' ? myJoinResult.value.count : 0
     myShareCount.value = myShareResult.status === 'fulfilled' ? myShareResult.value.count : 0
   } finally {
     loading.value = false
   }
+}
+
+function openPath(path: string) {
+  void router.push(path)
 }
 
 onMounted(() => {
@@ -82,116 +91,144 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <section class="hero-card workspace-hero">
-      <div>
-        <p class="page-eyebrow">Workspace</p>
-        <h2>先从你自己的范围开始工作，而不是先理解整套治理体系。</h2>
-        <p class="page-copy">
-          当前工作部门、可访问空间、待处理审批和我的申请都已经收敛到这里。进入下一步时，你只需要按任务走，不需要自己拼产品地图。
-        </p>
+    <section class="page-toolbar">
+      <div class="page-toolbar__title">
+        <h2>工作台</h2>
+        <span>当前部门：{{ currentMembership?.department_name || '未设置' }}</span>
       </div>
-
-      <div class="hero-card__summary">
-        <span>{{ currentMembership?.department_name || '未设置' }}</span>
-        <small>当前工作部门</small>
+      <div class="page-toolbar__actions">
+        <el-button
+          v-for="action in quickActions"
+          :key="action.path"
+          :type="action.path === '/knowledge-bases' ? 'primary' : 'default'"
+          @click="openPath(action.path)"
+        >
+          {{ action.label }}
+        </el-button>
       </div>
     </section>
 
-    <section class="stat-grid">
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">工作部门</span>
-        <strong>{{ currentMembership?.department_name || '--' }}</strong>
-        <p>上传、浏览和协作都会优先以这个部门为默认上下文。</p>
+    <section class="summary-grid">
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">当前部门</span>
+        <strong class="summary-card__value">{{ currentMembership?.department_name || '--' }}</strong>
       </el-card>
-
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">可访问知识空间</span>
-        <strong>{{ knowledgeBaseCount }}</strong>
-        <p>当前组织归属和共享范围内可见的空间总数。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">可访问知识空间</span>
+        <strong class="summary-card__value">{{ knowledgeBaseCount }}</strong>
       </el-card>
-
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">可访问文档</span>
-        <strong>{{ documentCount }}</strong>
-        <p>当前权限范围内已入库文档数量。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">可访问文档</span>
+        <strong class="summary-card__value">{{ documentCount }}</strong>
       </el-card>
-
-      <el-card class="metric-card" shadow="hover">
-        <span class="metric-card__label">待处理审批</span>
-        <strong>{{ pendingApprovalCount }}</strong>
-        <p>包括加入部门审批和知识空间共享审批。</p>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">待处理审批</span>
+        <strong class="summary-card__value">{{ pendingApprovalCount }}</strong>
       </el-card>
     </section>
 
-    <section class="grid-two">
-      <el-card shadow="never" class="soft-card">
-        <template #header>下一步操作</template>
+    <section class="split-grid">
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>我的部门</strong>
+          </div>
+        </template>
+        <el-table v-loading="loading" :data="memberships" stripe empty-text="暂无部门归属">
+          <el-table-column prop="department_name" label="部门" min-width="180" />
+          <el-table-column label="关系" min-width="140">
+            <template #default="{ row }">
+              {{ formatMembershipLabel(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="主部门" width="100">
+            <template #default="{ row }">
+              {{ row.is_primary ? '是' : '否' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default>
+              <el-button text type="primary" @click="openPath('/organization')">
+                查看组织
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>快捷入口</strong>
+          </div>
+        </template>
         <div class="action-grid">
-          <router-link
-            v-for="tile in actionTiles"
-            :key="tile.title"
-            class="action-tile"
-            :to="tile.to"
+          <button
+            v-for="action in quickActions"
+            :key="action.path"
+            type="button"
+            class="workspace-action"
+            @click="openPath(action.path)"
           >
-            <strong>{{ tile.title }}</strong>
-            <span>{{ tile.description }}</span>
-          </router-link>
+            {{ action.label }}
+          </button>
         </div>
-      </el-card>
-
-      <el-card shadow="never" class="soft-card">
-        <template #header>我的组织范围</template>
-        <el-skeleton :loading="loading" animated :rows="4">
-          <template #default>
-            <div class="roadmap-boxes">
-              <div
-                v-for="membership in memberships"
-                :key="membership.id"
-                class="roadmap-box"
-              >
-                <strong>{{ membership.department_name }}</strong>
-                <span>{{ formatMembershipLabel(membership) }}</span>
-              </div>
-            </div>
-          </template>
-        </el-skeleton>
       </el-card>
     </section>
 
-    <section class="grid-two">
-      <el-card shadow="never" class="soft-card">
-        <template #header>我发起的事项</template>
-        <div class="roadmap-boxes">
-          <div class="roadmap-box">
-            <strong>{{ myRequestCount }} 条记录</strong>
-            <span>包括加入部门申请和知识空间共享申请，方便你持续跟进结果。</span>
+    <section class="split-grid">
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>待办概览</strong>
           </div>
-          <div class="roadmap-box">
-            <strong>{{ myJoinCount }} 条组织申请</strong>
-            <span>协作部门申请会影响你的可见部门范围。</span>
-          </div>
-          <div class="roadmap-box">
-            <strong>{{ myShareCount }} 条共享申请</strong>
-            <span>共享一旦通过，目标部门会立即获得对应知识空间的访问资格。</span>
-          </div>
-        </div>
+        </template>
+        <el-table v-loading="loading" :data="pendingRows" stripe>
+          <el-table-column prop="label" label="事项" min-width="180" />
+          <el-table-column prop="count" label="数量" width="100" />
+          <el-table-column label="入口" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" @click="openPath(row.path)">
+                进入
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </el-card>
 
-      <el-card shadow="never" class="soft-card">
-        <template #header>使用节奏建议</template>
-        <ul class="check-list">
-          <li>先从知识空间进入，再决定上传到哪里，不要从“全局上传”开始。</li>
-          <li>审批中心只看待办，不要在组织页里同时处理审批和治理。</li>
-          <li>跨部门复用资料时，先共享空间，再让对方检索和查看。</li>
-          <li>如果你有多个部门归属，先在顶部切到当前工作部门再继续操作。</li>
-        </ul>
+      <el-card class="table-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>我发起的事项</strong>
+          </div>
+        </template>
+        <el-table v-loading="loading" :data="initiatedRows" stripe>
+          <el-table-column prop="label" label="事项" min-width="180" />
+          <el-table-column prop="count" label="数量" width="100" />
+          <el-table-column label="总计" width="120">
+            <template #default="{ $index }">
+              {{ $index === 0 ? myRequestCount : '--' }}
+            </template>
+          </el-table-column>
+        </el-table>
       </el-card>
     </section>
   </div>
 </template>
 
 <style scoped>
-.workspace-hero {
-  align-items: center;
+.workspace-action {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: #ffffff;
+  color: #111827;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workspace-action:hover {
+  border-color: rgba(64, 158, 255, 0.25);
+  background: #ecf5ff;
 }
 </style>

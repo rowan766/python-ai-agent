@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, is_platform_admin
 from app.core.auth import create_access_token
 from app.core.captcha import (
     CAPTCHA_EXPIRE_MINUTES,
@@ -144,6 +144,8 @@ async def build_user_profile(current_user: User, db: AsyncSession) -> dict:
         "id": current_user.id,
         "email": current_user.email,
         "username": current_user.username,
+        "is_active": current_user.is_active,
+        "is_platform_admin": is_platform_admin(current_user),
         "organization_status": "ready" if memberships else "pending_assignment",
         "memberships": memberships,
     }

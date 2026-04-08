@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
-from app.api import chat, rag, auth, organization, knowledge
+from app.api import chat, rag, auth, organization, knowledge, users
 from app import models as app_models
 from app.core.database import engine, Base
 from app.core.demo_seed import seed_demo_data
@@ -19,6 +19,7 @@ TAG_CHAT = "聊天"
 TAG_RAG = "知识库"
 TAG_ORG = "组织"
 TAG_KB = "知识空间"
+TAG_USER = "用户"
 
 OPENAPI_TAGS = [
     {
@@ -40,6 +41,10 @@ OPENAPI_TAGS = [
     {
         "name": TAG_KB,
         "description": "知识库空间、文档归属与企业级上传入口。 Knowledge base spaces, document ownership, and governed upload endpoints.",
+    },
+    {
+        "name": TAG_USER,
+        "description": "平台管理员查看用户、维护状态与部门归属。 Platform admin user management endpoints.",
     },
 ]
 
@@ -82,6 +87,7 @@ app.include_router(chat.router, prefix="/api", tags=[TAG_CHAT])
 app.include_router(rag.router, prefix="/api", tags=[TAG_RAG])
 app.include_router(organization.router, prefix="/api", tags=[TAG_ORG])
 app.include_router(knowledge.router, prefix="/api", tags=[TAG_KB])
+app.include_router(users.router, prefix="/api", tags=[TAG_USER])
 
 @app.get("/")
 async def root():

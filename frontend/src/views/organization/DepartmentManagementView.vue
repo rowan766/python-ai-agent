@@ -42,9 +42,7 @@ const createForm = reactive<CreateDepartmentPayload>({
   full_name: '',
 })
 
-const editForm = reactive<
-  UpdateDepartmentPayload & { manager_user_id?: number }
->({
+const editForm = reactive<UpdateDepartmentPayload & { manager_user_id?: number }>({
   name: '',
   full_name: '',
   status: 'active',
@@ -59,15 +57,6 @@ const departmentCount = computed(() => {
   }
   return countNodes(departments.value)
 })
-
-const impactRows = computed(() => [
-  { label: '下级部门', value: departmentImpact.value?.child_department_count ?? 0 },
-  { label: '有效成员', value: departmentImpact.value?.active_member_count ?? 0 },
-  { label: '知识库空间', value: departmentImpact.value?.knowledge_base_count ?? 0 },
-  { label: '文档数量', value: departmentImpact.value?.document_count ?? 0 },
-  { label: '共享关系', value: departmentImpact.value?.active_share_count ?? 0 },
-  { label: '待处理共享申请', value: departmentImpact.value?.pending_share_request_count ?? 0 },
-])
 
 async function loadTree() {
   loading.value = true
@@ -203,8 +192,8 @@ async function handleSaveDepartment() {
     })
 
     if (
-      editForm.manager_user_id &&
-      editForm.manager_user_id !== selectedDepartment.value.manager_user_id
+      editForm.manager_user_id
+      && editForm.manager_user_id !== selectedDepartment.value.manager_user_id
     ) {
       await updateDepartmentManager(selectedDepartment.value.id, {
         manager_user_id: editForm.manager_user_id,
@@ -217,8 +206,7 @@ async function handleSaveDepartment() {
   } catch (error) {
     const axiosError = error as AxiosError<{ detail?: string | { message?: string } }>
     const detail = axiosError.response?.data?.detail
-    const message =
-      typeof detail === 'string' ? detail : detail?.message || '更新部门失败。'
+    const message = typeof detail === 'string' ? detail : detail?.message || '更新部门失败。'
     ElMessage.error(message)
     console.error(error)
   } finally {
@@ -249,24 +237,12 @@ async function handleMoveDepartment() {
 }
 
 async function handleDeleteDepartment(node: DepartmentNode) {
-  let impactText = ''
   try {
-    const impact = await fetchDepartmentImpact(node.id)
-    impactText = `下级部门 ${impact.child_department_count} 个，成员 ${impact.active_member_count} 人，知识库 ${impact.knowledge_base_count} 个，文档 ${impact.document_count} 份，共享关系 ${impact.active_share_count} 条。`
-  } catch {
-    impactText = '删除前影响信息读取失败，仍可以继续尝试删除。'
-  }
-
-  try {
-    await ElMessageBox.confirm(
-      `${impactText}\n\n确认删除部门「${node.name}」吗？`,
-      '删除部门',
-      {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      },
-    )
+    await ElMessageBox.confirm(`确认删除部门「${node.name}」吗？`, '删除部门', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
   } catch {
     return
   }
@@ -282,10 +258,11 @@ async function handleDeleteDepartment(node: DepartmentNode) {
     }
     await loadTree()
   } catch (error) {
-    const axiosError = error as AxiosError<{ detail?: string | { message?: string; impact?: unknown } }>
+    const axiosError = error as AxiosError<{
+      detail?: string | { message?: string; impact?: unknown }
+    }>
     const detail = axiosError.response?.data?.detail
-    const message =
-      typeof detail === 'string' ? detail : detail?.message || '删除部门失败。'
+    const message = typeof detail === 'string' ? detail : detail?.message || '删除部门失败。'
     ElMessage.error(message)
     console.error(error)
   } finally {
@@ -304,91 +281,129 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <section class="hero-card">
-      <div>
-        <p class="page-eyebrow">Department Governance</p>
-        <h2>把组织治理动作收回到部门树本身，点到哪里就管理哪里。</h2>
-        <p class="page-copy">
-          现在新增、编辑、删除和调整层级都直接挂在树节点上，部门树本身就是主要操作面。下面保留成员和影响信息，作为你做决策时的辅助区。
-        </p>
+    <section class="page-toolbar">
+      <div class="page-toolbar__title">
+        <h2>部门治理</h2>
+        <span>选中部门后在右侧查看成员和影响范围</span>
       </div>
-      <div class="hero-card__summary">
-        <span>{{ departmentCount }}</span>
-        <small>当前部门节点数</small>
+      <div class="page-toolbar__actions">
         <el-button type="primary" @click="openCreateDialog()">新增根部门</el-button>
       </div>
     </section>
 
-    <el-card shadow="never" class="soft-card">
-      <template #header>部门树</template>
-      <el-tree
-        v-loading="loading"
-        :data="departments"
-        node-key="id"
-        default-expand-all
-        :props="{ label: 'name', children: 'children' }"
-        highlight-current
-        empty-text="暂无部门"
-        @node-click="applySelection"
-      >
-        <template #default="{ data }">
-          <div class="tree-node">
-            <div class="tree-node__label">
-              <span>{{ renderActionLabel(data) }}</span>
-              <el-tag v-if="data.id === selectedDepartment?.id" size="small" round>当前选中</el-tag>
-            </div>
-            <div class="tree-node__actions">
-              <el-button text size="small" @click.stop="openCreateDialog(data)">
-                <el-icon><CirclePlus /></el-icon>
-                <span>新增</span>
-              </el-button>
-              <el-button text size="small" @click.stop="openEditDialog(data)">
-                <el-icon><EditPen /></el-icon>
-                <span>编辑</span>
-              </el-button>
-              <el-button text size="small" @click.stop="openMoveDialog(data)">
-                <el-icon><Rank /></el-icon>
-                <span>调整</span>
-              </el-button>
-              <el-button text size="small" type="danger" @click.stop="handleDeleteDepartment(data)">
-                <el-icon><Delete /></el-icon>
-                <span>删除</span>
-              </el-button>
-            </div>
-          </div>
-        </template>
-      </el-tree>
-    </el-card>
-
-    <section v-if="selectedDepartment" class="grid-two">
-      <el-card shadow="never" class="soft-card">
-        <template #header>部门成员</template>
-        <el-table :data="departmentMembers" empty-text="当前部门还没有可见成员">
-          <el-table-column prop="username" label="成员" min-width="140" />
-          <el-table-column prop="email" label="邮箱" min-width="200" />
-          <el-table-column prop="membership_type" label="关系" width="120" />
-          <el-table-column prop="is_primary" label="主部门" width="100">
-            <template #default="{ row }">
-              {{ row.is_primary ? '是' : '否' }}
-            </template>
-          </el-table-column>
-        </el-table>
+    <section class="summary-grid">
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">部门节点</span>
+        <strong class="summary-card__value">{{ departmentCount }}</strong>
       </el-card>
-
-      <el-card shadow="never" class="soft-card">
-        <template #header>影响提示</template>
-        <div v-if="departmentImpact" class="impact-stack">
-          <div v-for="item in impactRows" :key="item.label" class="impact-row">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </div>
-          <p class="impact-note">
-            删除或停用前，先看这里的影响范围。只要还挂着下级部门、知识库或共享关系，就不应该直接清掉节点。
-          </p>
-        </div>
-        <el-empty v-else description="选择部门后会显示当前影响范围。" />
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">当前选中</span>
+        <strong class="summary-card__value">{{ selectedDepartment?.name || '--' }}</strong>
+      </el-card>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">部门成员</span>
+        <strong class="summary-card__value">{{ departmentMembers.length }}</strong>
+      </el-card>
+      <el-card class="summary-card" shadow="never">
+        <span class="summary-card__label">知识空间</span>
+        <strong class="summary-card__value">{{ departmentImpact?.knowledge_base_count ?? 0 }}</strong>
       </el-card>
     </section>
+
+    <section class="split-grid">
+      <el-card class="panel-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>部门树</strong>
+          </div>
+        </template>
+        <el-tree
+          v-loading="loading"
+          :data="departments"
+          node-key="id"
+          default-expand-all
+          :props="{ label: 'name', children: 'children' }"
+          highlight-current
+          empty-text="暂无部门"
+          @node-click="applySelection"
+        >
+          <template #default="{ data }">
+            <div class="tree-node">
+              <div class="tree-node__label">
+                <span>{{ renderActionLabel(data) }}</span>
+              </div>
+              <div class="tree-node__actions">
+                <el-button text size="small" @click.stop="openCreateDialog(data)">
+                  <el-icon><CirclePlus /></el-icon>
+                </el-button>
+                <el-button text size="small" @click.stop="openEditDialog(data)">
+                  <el-icon><EditPen /></el-icon>
+                </el-button>
+                <el-button text size="small" @click.stop="openMoveDialog(data)">
+                  <el-icon><Rank /></el-icon>
+                </el-button>
+                <el-button text size="small" type="danger" @click.stop="handleDeleteDepartment(data)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+          </template>
+        </el-tree>
+      </el-card>
+
+      <el-card class="panel-card" shadow="never">
+        <template #header>
+          <div class="table-toolbar">
+            <strong>影响范围</strong>
+          </div>
+        </template>
+        <div v-if="departmentImpact" class="compact-stack">
+          <div class="compact-row">
+            <span>下级部门</span>
+            <strong>{{ departmentImpact.child_department_count }}</strong>
+          </div>
+          <div class="compact-row">
+            <span>有效成员</span>
+            <strong>{{ departmentImpact.active_member_count }}</strong>
+          </div>
+          <div class="compact-row">
+            <span>知识空间</span>
+            <strong>{{ departmentImpact.knowledge_base_count }}</strong>
+          </div>
+          <div class="compact-row">
+            <span>文档数量</span>
+            <strong>{{ departmentImpact.document_count }}</strong>
+          </div>
+          <div class="compact-row">
+            <span>共享关系</span>
+            <strong>{{ departmentImpact.active_share_count }}</strong>
+          </div>
+          <div class="compact-row">
+            <span>待处理共享申请</span>
+            <strong>{{ departmentImpact.pending_share_request_count }}</strong>
+          </div>
+        </div>
+        <el-empty v-else description="选择部门后显示影响范围" />
+      </el-card>
+    </section>
+
+    <el-card v-if="selectedDepartment" class="table-card" shadow="never">
+      <template #header>
+        <div class="table-toolbar">
+          <strong>部门成员</strong>
+        </div>
+      </template>
+      <el-table :data="departmentMembers" empty-text="当前部门还没有可见成员">
+        <el-table-column prop="username" label="成员" min-width="140" />
+        <el-table-column prop="email" label="邮箱" min-width="220" />
+        <el-table-column prop="membership_type" label="关系" width="120" />
+        <el-table-column label="主部门" width="100">
+          <template #default="{ row }">
+            {{ row.is_primary ? '是' : '否' }}
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
     <el-dialog v-model="createDialogVisible" title="新增部门" width="520px">
       <el-form label-position="top">
@@ -401,17 +416,17 @@ onMounted(async () => {
             default-expand-all
             clearable
             :props="{ label: 'name', children: 'children', value: 'id' }"
-            placeholder="不选则创建根部门（仅平台管理员）"
+            placeholder="不选则创建根部门"
           />
         </el-form-item>
         <el-form-item label="部门编码">
-          <el-input v-model="createForm.code" placeholder="例如 dept-rd-platform" />
+          <el-input v-model="createForm.code" />
         </el-form-item>
         <el-form-item label="部门名称">
-          <el-input v-model="createForm.name" placeholder="例如 平台研发部" />
+          <el-input v-model="createForm.name" />
         </el-form-item>
         <el-form-item label="部门全称">
-          <el-input v-model="createForm.full_name" placeholder="例如 研发中心 / 平台研发部" />
+          <el-input v-model="createForm.full_name" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -470,7 +485,7 @@ onMounted(async () => {
             default-expand-all
             clearable
             :props="{ label: 'name', children: 'children', value: 'id' }"
-            placeholder="不选则作为根部门（仅平台管理员）"
+            placeholder="不选则作为根部门"
           />
         </el-form-item>
       </el-form>
@@ -489,55 +504,25 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .tree-node__label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   min-width: 0;
-  color: var(--page-green-deep);
+  color: #111827;
 }
 
 .tree-node__actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
 .tree-node:hover .tree-node__actions {
   opacity: 1;
-}
-
-.impact-stack {
-  display: grid;
-  gap: 12px;
-}
-
-.impact-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border: 1px solid rgba(24, 54, 48, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 253, 248, 0.9);
-  color: var(--page-muted);
-}
-
-.impact-row strong {
-  color: var(--page-green-deep);
-  font-size: 20px;
-}
-
-.impact-note {
-  margin: 0;
-  color: var(--page-muted);
-  line-height: 1.8;
 }
 </style>

@@ -106,7 +106,7 @@ function logout() {
         </div>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="router.push('/organization?tab=access')">
+            <el-dropdown-item @click="router.push('/organization')">
               组织中心
             </el-dropdown-item>
             <el-dropdown-item divided @click="logout">
@@ -130,10 +130,9 @@ function logout() {
 
 .app-header__headline {
   margin-top: 10px;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 600;
   color: #111827;
-  letter-spacing: -0.03em;
 }
 
 .app-header__actions {
@@ -149,9 +148,9 @@ function logout() {
 
 .app-header__department-pill {
   border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.82);
+  background: #ffffff;
   color: #4b5563;
   font-size: 13px;
 }
@@ -168,11 +167,10 @@ function logout() {
   height: 38px;
   width: 38px;
   place-items: center;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #1b6b56, #c29137);
+  border-radius: 10px;
+  background: #409eff;
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(27, 107, 86, 0.18);
 }
 
 .app-header__name {

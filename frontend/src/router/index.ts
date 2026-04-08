@@ -71,13 +71,13 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'ai/chat',
         name: 'ai-chat',
-        component: () => import('@/views/rag/RagSearchView.vue'),
+        component: () => import('@/views/rag/AiChatView.vue'),
         meta: { title: 'AI 对话', navKey: '/ai/chat', requiresAuth: true, requiresOrgReady: true },
       },
       {
         path: 'knowledge/search',
         name: 'knowledge-search',
-        component: () => import('@/views/rag/RagSearchView.vue'),
+        component: () => import('@/views/rag/KnowledgeSearchView.vue'),
         meta: { title: '知识检索', navKey: '/knowledge/search', requiresAuth: true, requiresOrgReady: true },
       },
       {
@@ -91,6 +91,18 @@ const routes: RouteRecordRaw[] = [
         name: 'approvals',
         component: () => import('@/views/approvals/ApprovalCenterView.vue'),
         meta: { title: '审批中心', navKey: '/approvals', requiresAuth: true, requiresOrgReady: true },
+      },
+      {
+        path: 'users',
+        name: 'users',
+        component: () => import('@/views/users/UserManagementView.vue'),
+        meta: {
+          title: '用户管理',
+          navKey: '/users',
+          requiresAuth: true,
+          requiresOrgReady: true,
+          requiresPlatformAdmin: true,
+        },
       },
     ],
   },
@@ -160,6 +172,11 @@ router.beforeEach(async (to) => {
 
   if (authStore.isAuthenticated && authStore.organizationReady && to.name === 'onboarding') {
     return { name: 'workspace' }
+  }
+
+  if (to.meta.requiresPlatformAdmin && !authStore.isPlatformAdmin) {
+    ElMessage.error('仅平台管理员可访问用户管理。')
+    return authStore.organizationReady ? { name: 'workspace' } : { name: 'onboarding' }
   }
 
   return true

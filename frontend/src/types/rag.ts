@@ -26,6 +26,7 @@ export interface ChatStreamPayload {
   messages: ChatMessage[]
   model?: string
   stream?: boolean
+  active_department_id?: number
 }
 
 export interface SupportedFormatsResponse {

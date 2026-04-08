@@ -1,5 +1,5 @@
 import { buildApiUrl, http } from '@/api/http'
-import { getAccessToken } from '@/utils/storage'
+import { clearAccessToken, getAccessToken } from '@/utils/storage'
 import type {
   ChatStreamPayload,
   ModelHealthResponse,
@@ -72,7 +72,24 @@ export async function streamChat(
   })
 
   if (!response.ok || !response.body) {
-    throw new Error(`聊天请求失败：${response.status}`)
+    let detail = ''
+    try {
+      const data = await response.json()
+      detail = typeof data?.detail === 'string' ? data.detail : ''
+    } catch {
+      detail = ''
+    }
+
+    if (response.status === 401) {
+      clearAccessToken()
+      throw new Error(detail || '登录状态已失效，请重新登录。')
+    }
+
+    if (response.status === 403) {
+      throw new Error(detail || '当前账号没有访问聊天接口的权限。')
+    }
+
+    throw new Error(detail || `聊天请求失败：${response.status}`)
   }
 
   const reader = response.body.getReader()

@@ -13,6 +13,7 @@ class ChatRequest(BaseModel):
     messages: List[Message]
     model: str = "qwen-turbo"
     stream: bool = True
+    active_department_id: Optional[int] = None
 
 class ChatResponse(BaseModel):
     content: str

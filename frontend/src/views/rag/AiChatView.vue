@@ -5,7 +5,10 @@ import MarkdownIt from 'markdown-it'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { streamChat } from '@/api/modules/rag'
+import { useAuthStore } from '@/stores/auth'
+import { getPreferredMembership } from '@/utils/organization'
 import type { ChatMessage } from '@/types/rag'
 
 interface ChatSession {
@@ -21,15 +24,18 @@ const chatForm = ref({
 })
 
 const quickPrompts = [
-  '总结我当前可访问的知识工作流',
-  '帮我整理一份适合部门负责人使用的空间治理清单',
-  '如果我要上传一批制度文档，应该怎么组织空间结构',
+  '工作台里都有哪些信息，分别代表什么？',
+  '如果我要新建知识空间，应该去哪一步步操作？',
+  '结合我当前的部门和权限，帮我说明我能使用哪些模块。',
 ]
 
 const conversations = ref<ChatSession[]>([])
 const currentConversationId = ref('')
 const chatLoading = ref(false)
 const chatAbortController = ref<AbortController | null>(null)
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
 
 const markdown = new MarkdownIt({
   html: false,
@@ -37,6 +43,9 @@ const markdown = new MarkdownIt({
   breaks: true,
 })
 
+const currentMembership = computed(() =>
+  getPreferredMembership(authStore.user?.memberships ?? []),
+)
 const currentConversation = computed(
   () => conversations.value.find((item) => item.id === currentConversationId.value) ?? null,
 )
@@ -111,6 +120,7 @@ async function sendChatMessage() {
       {
         model: chatForm.value.model.trim() || 'qwen-turbo',
         messages: session.messages.filter((message) => message.content.trim()),
+        active_department_id: currentMembership.value?.department_id,
       },
       {
         signal: controller.signal,
@@ -125,7 +135,15 @@ async function sendChatMessage() {
       assistantMessage.content = assistantMessage.content || '已停止本次生成。'
     } else {
       session.messages.pop()
-      ElMessage.error(getErrorMessage(error, '对话请求失败，请稍后重试。'))
+      const message = getErrorMessage(error, '对话请求失败，请稍后重试。')
+      ElMessage.error(message)
+      if (message.includes('登录状态已失效')) {
+        authStore.logout()
+        void router.push({
+          name: 'login',
+          query: { redirect: route.fullPath },
+        })
+      }
       console.error(error)
     }
   } finally {
@@ -191,7 +209,7 @@ if (!conversations.value.length) {
 
       <div class="chat-page__body">
         <div v-if="!currentConversation?.messages.length" class="chat-empty">
-          <div class="chat-empty__title">今天要处理什么问题</div>
+          <div class="chat-empty__title">可以直接问系统怎么用，或者问我当前的数据状态</div>
           <div class="chat-empty__prompts">
             <button
               v-for="prompt in quickPrompts"
@@ -237,7 +255,7 @@ if (!conversations.value.length) {
             @keydown.ctrl.enter.prevent="sendChatMessage"
           />
           <div class="chat-compose__actions">
-            <span>当前接口为纯对话模式</span>
+            <span>已复用当前系统登录状态，并带入系统手册、当前用户、部门和实时业务摘要</span>
             <div class="chat-compose__buttons">
               <el-button v-if="chatLoading" @click="stopChat">停止</el-button>
               <el-button type="primary" :loading="chatLoading" @click="sendChatMessage">

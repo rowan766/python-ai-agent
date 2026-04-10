@@ -200,14 +200,29 @@ onMounted(() => {
 }
 
 .captcha-image-button {
+  position: relative;
   width: 132px;
   height: 44px;
-  padding: 0;
-  border: 1px solid #dcdfe6;
+  padding: 4px;
+  border: 1px solid #d9e6fb;
   border-radius: 8px;
-  background: #fff;
+  background:
+    repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.22) 0 6px, rgba(255, 255, 255, 0) 6px 14px),
+    radial-gradient(circle at 22% 30%, rgba(255, 255, 255, 0.34) 0 8%, transparent 9%),
+    radial-gradient(circle at 78% 68%, rgba(255, 255, 255, 0.26) 0 7%, transparent 8%),
+    linear-gradient(135deg, #dff2ff 0%, #d9e8ff 26%, #efe2ff 52%, #ffe9d2 100%);
   cursor: pointer;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.captcha-image-button:hover:not(:disabled) {
+  border-color: #b7cdf5;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 10px 22px rgba(102, 126, 234, 0.16);
+  transform: translateY(-1px);
 }
 
 .captcha-image-button:disabled {
@@ -219,6 +234,8 @@ onMounted(() => {
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: 6px;
+  mix-blend-mode: multiply;
 }
 
 .captcha-placeholder {

@@ -59,8 +59,8 @@
           </div>
         </template>
 
-        <div class="toolbar-shell">
-          <div class="search-bar">
+        <CrudToolbar>
+          <template #search>
             <el-form :inline="true" :model="searchForm">
               <el-form-item>
                 <el-input v-model="searchForm.username" placeholder="请输入用户名" clearable class="toolbar-input">
@@ -77,27 +77,35 @@
                 </el-input>
               </el-form-item>
               <el-form-item>
-                <el-button class="toolbar-btn toolbar-btn--search" :icon="Search" @click="handleSearch">搜索</el-button>
-                <el-button class="toolbar-btn" :icon="Refresh" @click="handleReset">重置</el-button>
+                <CrudButton style-type="primary" tone="blue" :icon="Search" @click="handleSearch">搜索</CrudButton>
+                <CrudButton style-type="secondary" tone="gray" :icon="Refresh" @click="handleReset">重置</CrudButton>
               </el-form-item>
             </el-form>
-          </div>
+          </template>
 
-          <div class="action-toolbar">
-            <el-button class="action-btn action-btn--blue" :icon="Plus" @click="handleAdd">新增</el-button>
-            <el-button class="action-btn action-btn--green" :icon="EditPen" :disabled="selectedRows.length !== 1" @click="handleEditSelected">修改</el-button>
-            <el-button class="action-btn action-btn--red" :icon="Delete" :disabled="selectedRows.length !== 1" @click="handleDeleteSelected">删除</el-button>
-            <el-button class="action-btn action-btn--gray" :icon="Upload" @click="handleImport">导入</el-button>
-            <el-button class="action-btn action-btn--amber" :icon="Download" @click="handleExport">导出</el-button>
-          </div>
-        </div>
+          <template #actions>
+            <CrudButton tone="blue" :icon="Plus" @click="handleAdd">新增</CrudButton>
+            <CrudButton tone="green" :icon="EditPen" :disabled="selectedRows.length !== 1" @click="handleEditSelected">修改</CrudButton>
+            <CrudButton tone="red" :icon="Delete" :disabled="selectedRows.length !== 1" @click="handleDeleteSelected">删除</CrudButton>
+            <CrudButton tone="gray" :icon="Upload" @click="handleImport">导入</CrudButton>
+            <CrudButton tone="amber" :icon="Download" @click="handleExport">导出</CrudButton>
+          </template>
+        </CrudToolbar>
 
-        <el-table
+        <CrudTable
           :data="tableData"
-          class="user-table"
-          style="width: 100%"
-          v-loading="loading"
+          :loading="loading"
+          :current-page="pagination.page"
+          :page-size="pagination.pageSize"
+          :total="pagination.total"
+          :show-summary="true"
+          :summary-icon="Files"
+          :summary-text="`共 ${pagination.total} 条`"
+          @update:current-page="pagination.page = $event"
+          @update:page-size="pagination.pageSize = $event"
           @selection-change="handleSelectionChange"
+          @page-size-change="handleSizeChange"
+          @page-current-change="handleCurrentChange"
         >
           <el-table-column type="selection" width="54" align="center" />
           <el-table-column prop="id" label="用户编号" width="110" align="center" />
@@ -119,76 +127,55 @@
           <el-table-column label="操作" width="250" fixed="right" align="center">
             <template #default="{ row }">
               <div class="table-actions">
-                <el-button class="table-action-btn" type="primary" size="small" :icon="UserFilled" @click="handleAssignRoles(row)">角色</el-button>
-                <el-button class="table-action-btn" type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-                <el-button class="table-action-btn" type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+                <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="UserFilled" @click="handleAssignRoles(row)">角色</CrudButton>
+                <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="Edit" @click="handleEdit(row)">编辑</CrudButton>
+                <CrudButton style-type="primary" size-variant="table" tone="red" :icon="Delete" @click="handleDelete(row)">删除</CrudButton>
               </div>
             </template>
           </el-table-column>
-        </el-table>
-
-        <div class="pagination">
-          <div class="table-summary">
-            <el-icon><Files /></el-icon>
-            <span>共 {{ pagination.total }} 条</span>
-          </div>
-          <el-pagination
-            v-model:current-page="pagination.page"
-            v-model:page-size="pagination.pageSize"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="sizes, prev, pager, next, jumper"
-            :total="pagination.total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-          />
-        </div>
+        </CrudTable>
       </el-card>
     </div>
 
-    <el-dialog
+    <CrudFormDialog
+      ref="formDialogRef"
       v-model="dialogVisible"
       :title="dialogTitle"
       width="600px"
+      :form-model="formData"
+      :rules="rules"
+      label-width="80px"
+      :confirm-loading="submitLoading"
+      @submit="handleSubmit"
       @close="handleDialogClose"
     >
-      <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="rules"
-        label-width="80px"
-      >
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="formData.username" placeholder="请输入用户名" />
-        </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="formData.email" placeholder="请输入邮箱" />
-        </el-form-item>
-        <el-form-item label="部门" prop="departmentId">
-          <el-tree-select
-            v-model="formData.departmentId"
-            :data="departmentTreeOptions"
-            :props="{ label: 'name', value: 'id' }"
-            placeholder="请选择所属部门"
-            check-strictly
-            clearable
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="密码" prop="password" v-if="!formData.id">
-          <el-input v-model="formData.password" type="password" placeholder="请输入密码" show-password />
-        </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="formData.status">
-            <el-radio :value="1">正常</el-radio>
-            <el-radio :value="0">禁用</el-radio>
-          </el-radio-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
-      </template>
-    </el-dialog>
+      <el-form-item label="用户名" prop="username">
+        <el-input v-model="formData.username" placeholder="请输入用户名" />
+      </el-form-item>
+      <el-form-item label="邮箱" prop="email">
+        <el-input v-model="formData.email" placeholder="请输入邮箱" />
+      </el-form-item>
+      <el-form-item label="部门" prop="departmentId">
+        <el-tree-select
+          v-model="formData.departmentId"
+          :data="departmentTreeOptions"
+          :props="{ label: 'name', value: 'id' }"
+          placeholder="请选择所属部门"
+          check-strictly
+          clearable
+          style="width: 100%"
+        />
+      </el-form-item>
+      <el-form-item v-if="!formData.id" label="密码" prop="password">
+        <el-input v-model="formData.password" type="password" placeholder="请输入密码" show-password />
+      </el-form-item>
+      <el-form-item label="状态" prop="status">
+        <el-radio-group v-model="formData.status">
+          <el-radio :value="1">正常</el-radio>
+          <el-radio :value="0">禁用</el-radio>
+        </el-radio-group>
+      </el-form-item>
+    </CrudFormDialog>
 
     <el-dialog
       v-model="roleDialogVisible"
@@ -244,6 +231,10 @@ import {
   User,
   UserFilled
 } from '@element-plus/icons-vue'
+import CrudButton from '../../components/crud/CrudButton.vue'
+import CrudFormDialog from '../../components/crud/CrudFormDialog.vue'
+import CrudTable from '../../components/crud/CrudTable.vue'
+import CrudToolbar from '../../components/crud/CrudToolbar.vue'
 import { getUserList, createUser, updateUser, deleteUser, getUserDetail, assignUserRoles } from '../../api/user'
 import { getDepartmentList } from '../../api/department'
 import { getRoleList } from '../../api/role'
@@ -252,7 +243,7 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
-const formRef = ref(null)
+const formDialogRef = ref(null)
 const departmentTreeRef = ref(null)
 const departmentTree = ref([])
 const departmentKeyword = ref('')
@@ -520,9 +511,9 @@ const handleRoleSubmit = async () => {
 }
 
 const handleSubmit = async () => {
-  if (!formRef.value) return
+  if (!formDialogRef.value) return
 
-  await formRef.value.validate(async (valid) => {
+  await formDialogRef.value.validate(async (valid) => {
     if (valid) {
       submitLoading.value = true
       try {
@@ -555,7 +546,7 @@ const handleSubmit = async () => {
 }
 
 const handleDialogClose = () => {
-  formRef.value?.resetFields()
+  formDialogRef.value?.resetFields()
   Object.assign(formData, {
     id: null,
     username: '',
@@ -648,101 +639,8 @@ onMounted(async () => {
   height: 642px;
 }
 
-.toolbar-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.search-bar :deep(.el-form) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.search-bar :deep(.el-form-item) {
-  margin-bottom: 0;
-}
-
 .toolbar-input {
   width: 250px;
-}
-
-.toolbar-btn,
-.action-btn {
-  border-radius: 4px;
-  font-weight: 600;
-  min-height: 32px;
-  padding: 7px 12px;
-}
-
-.toolbar-btn--search {
-  background: #409eff;
-  border-color: #409eff;
-  color: #fff;
-}
-
-.action-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.action-btn {
-  border: 1px solid transparent;
-  padding: 7px 14px;
-}
-
-.action-btn--blue {
-  background: #e8f3ff;
-  border-color: #cfe4ff;
-  color: #2f7ef7;
-}
-
-.action-btn--green {
-  background: #edf9ee;
-  border-color: #d2f2d6;
-  color: #43a047;
-}
-
-.action-btn--red {
-  background: #fff1f0;
-  border-color: #ffd9d6;
-  color: #e85d57;
-}
-
-.action-btn--gray {
-  background: #f6f8fb;
-  border-color: #e5eaf1;
-  color: #6b7b91;
-}
-
-.action-btn--amber {
-  background: #fff7e8;
-  border-color: #ffe2ae;
-  color: #d9822b;
-}
-
-.user-table {
-  border: 1px solid #edf2f7;
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.user-table :deep(.el-table__header-wrapper th) {
-  background: #f4f5f7;
-  color: #4b5563;
-  font-weight: 700;
-  border-bottom-color: #e5e7eb;
-}
-
-.user-table :deep(.el-table__row td) {
-  border-bottom-color: #edf2f7;
-}
-
-.user-table :deep(.el-table__row:hover td) {
-  background: #f7fbff !important;
 }
 
 .table-actions {
@@ -750,27 +648,6 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
-}
-
-.table-action-btn {
-  min-height: 28px;
-  padding: 5px 10px;
-  border-radius: 4px;
-}
-
-.pagination {
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.table-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #7b8ba0;
 }
 
 @media (max-width: 960px) {
@@ -788,11 +665,6 @@ onMounted(async () => {
 
   .toolbar-input {
     width: 100%;
-  }
-
-  .pagination {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }
 </style>

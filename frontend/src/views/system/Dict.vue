@@ -4,7 +4,7 @@
       <el-row :gutter="20">
         <!-- 左侧：字典类型 -->
         <el-col :span="10">
-          <el-card>
+          <el-card class="dict-card" shadow="never">
             <template #header>
               <div class="card-header">
                 <span>字典类型</span>
@@ -15,6 +15,7 @@
             <el-table
               ref="typeTableRef"
               :data="typeTableData"
+              class="dict-table"
               border
               style="width: 100%"
               v-loading="typeLoading"
@@ -57,7 +58,7 @@
 
         <!-- 右侧：字典数据 -->
         <el-col :span="14">
-          <el-card>
+          <el-card class="dict-card" shadow="never">
             <template #header>
               <div class="card-header">
                 <span>字典数据 <span v-if="currentType" class="type-name">（{{ currentType.name }}）</span></span>
@@ -77,6 +78,7 @@
               <el-table
                 ref="dataTableRef"
                 :data="dataTableData"
+                class="dict-table"
                 border
                 style="width: 100%"
                 v-loading="dataLoading"
@@ -655,6 +657,12 @@
     padding: 0;
   }
 
+  .dict-card {
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+  }
+
   .card-header {
     display: flex;
     justify-content: space-between;
@@ -684,6 +692,27 @@
     min-height: 28px;
     padding: 5px 10px;
     border-radius: 4px;
+  }
+
+  .dict-table {
+    border: 1px solid #edf2f7;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .dict-table :deep(.el-table__header-wrapper th) {
+    background: #f4f5f7;
+    color: #4b5563;
+    font-weight: 700;
+    border-bottom-color: #e5e7eb;
+  }
+
+  .dict-table :deep(.el-table__row td) {
+    border-bottom-color: #edf2f7;
+  }
+
+  .dict-table :deep(.el-table__row:hover td) {
+    background: #f7fbff !important;
   }
 
   :deep(.el-table__body tr.current-row > td) {

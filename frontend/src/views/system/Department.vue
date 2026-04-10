@@ -1,6 +1,6 @@
 <template>
   <div class="department-management">
-    <el-card>
+    <el-card class="department-card" shadow="never">
       <template #header>
         <div class="card-header">
           <span>部门管理</span>
@@ -10,6 +10,7 @@
 
       <el-table
         :data="tableData"
+        class="department-table"
         border
         row-key="id"
         default-expand-all
@@ -341,9 +342,36 @@ onMounted(async () => {
   padding: 0;
 }
 
+.department-card {
+  border: none;
+  border-radius: 20px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.department-table {
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.department-table :deep(.el-table__header-wrapper th) {
+  background: #f4f5f7;
+  color: #4b5563;
+  font-weight: 700;
+  border-bottom-color: #e5e7eb;
+}
+
+.department-table :deep(.el-table__row td) {
+  border-bottom-color: #edf2f7;
+}
+
+.department-table :deep(.el-table__row:hover td) {
+  background: #f7fbff !important;
 }
 </style>

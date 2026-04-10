@@ -6,7 +6,7 @@
           <el-icon><Grid /></el-icon>
         </div>
         <div v-if="!isCollapse" class="brand-copy">
-          <strong>智慧养护</strong>
+          <strong>企业级RAG管理系统</strong>
           <span>Admin Console</span>
         </div>
       </div>
@@ -40,6 +40,8 @@
               </el-icon>
             </button>
 
+            <span class="header-divider" aria-hidden="true"></span>
+
             <div class="header-breadcrumb">
               <el-breadcrumb separator="/">
                 <el-breadcrumb-item
@@ -53,17 +55,21 @@
           </div>
 
           <div class="header-right">
-            <el-tooltip content="刷新页面" placement="bottom">
-              <button class="icon-button icon-button--compact" type="button" @click="refreshCurrentRoute">
-                <el-icon><RefreshRight /></el-icon>
-              </button>
-            </el-tooltip>
+            <div class="header-actions">
+              <el-tooltip content="刷新页面" placement="bottom">
+                <button class="icon-button icon-button--compact" type="button" @click="refreshCurrentRoute">
+                  <el-icon><RefreshRight /></el-icon>
+                </button>
+              </el-tooltip>
 
-            <el-tooltip content="全屏" placement="bottom">
-              <button class="icon-button icon-button--compact" type="button" @click="toggleFullscreen">
-                <el-icon><FullScreen /></el-icon>
-              </button>
-            </el-tooltip>
+              <el-tooltip content="全屏" placement="bottom">
+                <button class="icon-button icon-button--compact" type="button" @click="toggleFullscreen">
+                  <el-icon><FullScreen /></el-icon>
+                </button>
+              </el-tooltip>
+            </div>
+
+            <span class="header-divider" aria-hidden="true"></span>
 
             <el-dropdown @command="handleCommand">
               <button class="user-button" type="button">
@@ -170,9 +176,40 @@ import { findOpenMenuIndexes, getRenderableMenus } from '../router/menuRuntime'
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const visitedTabsStorageKey = 'rag-admin:visited-tabs'
+
+const loadVisitedTabs = () => {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(visitedTabsStorageKey)
+    if (!rawValue) {
+      return []
+    }
+
+    const parsedValue = JSON.parse(rawValue)
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue.filter((item) => item && typeof item.path === 'string' && typeof item.title === 'string')
+  } catch (error) {
+    return []
+  }
+}
+
+const saveVisitedTabs = (tabs) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.sessionStorage.setItem(visitedTabsStorageKey, JSON.stringify(tabs))
+}
 
 const isCollapse = ref(false)
-const visitedTabs = ref([])
+const visitedTabs = ref(loadVisitedTabs())
 const contextMenu = ref({
   visible: false,
   x: 0,
@@ -247,6 +284,14 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  visitedTabs,
+  (tabs) => {
+    saveVisitedTabs(tabs)
+  },
+  { deep: true }
 )
 
 const toggleCollapse = () => {
@@ -363,6 +408,7 @@ const handleCommand = async (command) => {
       })
       userStore.logout()
       visitedTabs.value = []
+      window.sessionStorage.removeItem(visitedTabsStorageKey)
       ElMessage.success('退出成功')
       router.push('/login')
     } catch (error) {
@@ -456,10 +502,6 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
-:deep(.el-sub-menu .el-menu) {
-  background: rgba(8, 15, 25, 0.16);
-}
-
 :deep(.el-menu-item),
 :deep(.el-sub-menu__title) {
   height: 42px;
@@ -497,6 +539,31 @@ onBeforeUnmount(() => {
   color: #b5c2d1;
 }
 
+:deep(.el-menu--collapse .el-menu-item),
+:deep(.el-menu--collapse .el-sub-menu__title) {
+  justify-content: center;
+}
+
+:deep(.el-menu--collapse .el-menu-item .el-icon),
+:deep(.el-menu--collapse .el-sub-menu__title .el-icon),
+:deep(.el-menu--collapse .el-menu-item [class^='el-icon']),
+:deep(.el-menu--collapse .el-menu-item [class*=' el-icon']),
+:deep(.el-menu--collapse .el-sub-menu__title [class^='el-icon']),
+:deep(.el-menu--collapse .el-sub-menu__title [class*=' el-icon']) {
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+}
+
+:deep(.el-menu--collapse .el-sub-menu__title span),
+:deep(.el-menu--collapse .el-menu-item .el-menu-tooltip__trigger),
+:deep(.el-menu--collapse .el-menu-item .el-tooltip__trigger),
+:deep(.el-menu--collapse .el-sub-menu__title .el-tooltip__trigger) {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
 .layout-content {
   min-width: 0;
 }
@@ -514,7 +581,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 12px 18px 8px;
+  padding: 6px 18px 4px;
 }
 
 .header-left,
@@ -524,9 +591,31 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-divider {
+  width: 1px;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(214, 224, 236, 0) 0%, #d8e1eb 20%, #d8e1eb 80%, rgba(214, 224, 236, 0) 100%);
+  flex: 0 0 1px;
+}
+
 .header-breadcrumb {
   color: #6b7b91;
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.header-breadcrumb :deep(.el-breadcrumb__inner) {
+  font-weight: 500;
+}
+
+.header-breadcrumb :deep(.el-breadcrumb__separator) {
+  color: #b3c0cf;
+  margin: 0 10px;
 }
 
 .icon-button {
@@ -605,7 +694,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 18px 10px;
+  padding: 8px 18px 8px;
+  border-top: 1px solid #edf1f6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
   overflow-x: auto;
 }
 
@@ -625,9 +716,10 @@ onBeforeUnmount(() => {
 }
 
 .route-tab:hover {
-  color: #52687f;
-  border-color: #d6e0ec;
-  background: #f7f9fc;
+  color: #35506d;
+  border-color: #bfd4ee;
+  background: linear-gradient(180deg, #f6faff 0%, #eaf3ff 100%);
+  box-shadow: 0 4px 10px rgba(47, 126, 247, 0.08);
 }
 
 .route-tab--active {
@@ -639,6 +731,21 @@ onBeforeUnmount(() => {
 .route-tab__close {
   font-size: 11px;
   border-radius: 999px;
+  transition: all 0.18s ease;
+}
+
+.route-tab:hover .route-tab__close {
+  background: rgba(47, 126, 247, 0.12);
+  color: #2f7ef7;
+}
+
+.route-tab--active .route-tab__close {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.route-tab--active:hover .route-tab__close {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
 .layout-main {
@@ -685,11 +792,11 @@ onBeforeUnmount(() => {
   }
 
   .header-topbar {
-    padding: 12px 12px 8px;
+    padding: 6px 12px 4px;
   }
 
   .route-tabs {
-    padding: 0 12px 10px;
+    padding: 8px 12px 8px;
   }
 
   .layout-main {

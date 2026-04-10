@@ -1,235 +1,248 @@
- <template>
-    <div class="role-management">
-      <el-card>
-        <template #header>
-          <div class="card-header">
+<template>
+  <div class="role-management">
+    <el-card class="role-card" shadow="never">
+      <template #header>
+        <div class="card-header">
+          <div class="card-title-main">
+            <el-icon><Setting /></el-icon>
             <span>角色管理</span>
-            <el-button type="primary" :icon="Plus" @click="handleAdd">新增角色</el-button>
           </div>
-        </template>
 
-        <div class="search-bar">
+          <el-breadcrumb separator="/" class="role-breadcrumb">
+            <el-breadcrumb-item>首页</el-breadcrumb-item>
+            <el-breadcrumb-item>系统管理</el-breadcrumb-item>
+            <el-breadcrumb-item>角色管理</el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
+      </template>
+
+      <CrudToolbar>
+        <template #search>
           <el-form :inline="true" :model="searchForm">
             <el-form-item label="角色名称">
-              <el-input v-model="searchForm.name" placeholder="请输入角色名称" clearable />
+              <el-input v-model="searchForm.name" placeholder="请输入角色名称" clearable class="toolbar-input" />
             </el-form-item>
             <el-form-item label="角色编码">
-              <el-input v-model="searchForm.code" placeholder="请输入角色编码" clearable />
+              <el-input v-model="searchForm.code" placeholder="请输入角色编码" clearable class="toolbar-input" />
             </el-form-item>
             <el-form-item label="状态">
-              <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
+              <el-select v-model="searchForm.status" placeholder="请选择状态" clearable class="toolbar-input">
                 <el-option label="启用" :value="1" />
                 <el-option label="禁用" :value="0" />
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
-              <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+              <CrudButton style-type="primary" tone="blue" :icon="Search" @click="handleSearch">搜索</CrudButton>
+              <CrudButton style-type="secondary" tone="gray" :icon="Refresh" @click="handleReset">重置</CrudButton>
             </el-form-item>
           </el-form>
-        </div>
-
-        <el-table :data="tableData" border style="width: 100%" v-loading="loading">
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="name" label="角色名称" min-width="120" />
-          <el-table-column prop="code" label="角色编码" min-width="120" />
-          <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="dataScope" label="数据权限" width="120">
-            <template #default="{ row }">
-              {{ getDataScopeLabel(row.dataScope) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="sort" label="排序" width="80" />
-          <el-table-column prop="status" label="状态" width="100">
-            <template #default="{ row }">
-              <el-switch
-                v-model="row.status"
-                :active-value="1"
-                :inactive-value="0"
-                @change="handleStatusChange(row)"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column prop="createdAt" label="创建时间" min-width="160" />
-          <el-table-column label="操作" width="250" fixed="right">
-            <template #default="{ row }">
-              <el-button type="primary" size="small" :icon="Setting" @click="handlePermission(row)">权限</el-button>
-              <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-              <el-button type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="pagination">
-          <el-pagination
-            v-model:current-page="pagination.page"
-            v-model:page-size="pagination.pageSize"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="pagination.total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-          />
-        </div>
-      </el-card>
-
-      <!-- 新增/编辑对话框 -->
-      <el-dialog
-        v-model="dialogVisible"
-        :title="dialogTitle"
-        width="600px"
-        @close="handleDialogClose"
-      >
-        <el-form
-          ref="formRef"
-          :model="formData"
-          :rules="rules"
-          label-width="100px"
-        >
-          <el-form-item label="角色名称" prop="name">
-            <el-input v-model="formData.name" placeholder="请输入角色名称" maxlength="50" />
-          </el-form-item>
-          <el-form-item label="角色编码" prop="code">
-            <el-input v-model="formData.code" placeholder="请输入角色编码" maxlength="50" :disabled="!!formData.id" />
-          </el-form-item>
-          <el-form-item label="描述" prop="description">
-            <el-input v-model="formData.description" type="textarea" placeholder="请输入描述" :rows="3" maxlength="200" />
-          </el-form-item>
-          <el-form-item label="数据权限" prop="dataScope">
-            <el-select v-model="formData.dataScope" placeholder="请选择数据权限范围">
-              <el-option label="全部数据" :value="1" />
-              <el-option label="本部门及以下" :value="2" />
-              <el-option label="本部门" :value="3" />
-              <el-option label="仅本人" :value="4" />
-              <el-option label="自定义" :value="5" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="排序" prop="sort">
-            <el-input-number v-model="formData.sort" :min="0" :max="9999" />
-          </el-form-item>
-          <el-form-item label="状态" prop="status">
-            <el-radio-group v-model="formData.status">
-              <el-radio :value="1">启用</el-radio>
-              <el-radio :value="0">禁用</el-radio>
-            </el-radio-group>
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
         </template>
-      </el-dialog>
 
-      <!-- 权限配置对话框 -->
-      <el-dialog
-        v-model="permissionDialogVisible"
-        :title="permissionDialogTitle"
-        width="600px"
-        @close="handlePermissionDialogClose"
-      >
-        <div v-loading="permissionLoading" class="permission-tree-wrapper">
-          <el-empty
-            v-if="!permissionLoading && permissionTree.length === 0"
-            description="暂无可配置的菜单权限"
-          />
-          <el-tree
-            v-else
-            ref="treeRef"
-            :data="permissionTree"
-            :props="{ label: 'label', children: 'children' }"
-            show-checkbox
-            node-key="id"
-            default-expand-all
-            check-strictly
-            :check-on-click-node="true"
-            :default-checked-keys="checkedKeys"
-          />
-        </div>
-        <template #footer>
-          <el-button @click="permissionDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="permissionSubmitLoading" @click="handlePermissionSubmit">确定</el-button>
+        <template #actions>
+          <CrudButton tone="blue" :icon="Plus" @click="handleAdd">新增角色</CrudButton>
         </template>
-      </el-dialog>
-    </div>
-  </template>
+      </CrudToolbar>
 
-  <script setup>
-  import { ref, reactive, onMounted, nextTick } from 'vue'
-  import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Plus, Search, Refresh, Edit, Delete, Setting } from '@element-plus/icons-vue'
-  import {
-    getRoleList,
-    createRole,
-    updateRole,
-    deleteRole,
-    updateRoleStatus,
-    getRoleDetail,
-    setRoleMenu
-  } from '../../api/role'
-  import { getMenuList } from '../../api/menu'
+      <CrudTable
+        :data="tableData"
+        :loading="loading"
+        :current-page="pagination.page"
+        :page-size="pagination.pageSize"
+        :total="pagination.total"
+        :show-summary="true"
+        :summary-icon="Files"
+        :summary-text="`共 ${pagination.total} 条`"
+        @update:current-page="pagination.page = $event"
+        @update:page-size="pagination.pageSize = $event"
+        @page-size-change="handleSizeChange"
+        @page-current-change="handleCurrentChange"
+      >
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="name" label="角色名称" min-width="120" />
+        <el-table-column prop="code" label="角色编码" min-width="120" />
+        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="dataScope" label="数据权限" width="120">
+          <template #default="{ row }">
+            {{ getDataScopeLabel(row.dataScope) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="sort" label="排序" width="80" />
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-switch
+              v-model="row.status"
+              :active-value="1"
+              :inactive-value="0"
+              @change="handleStatusChange(row)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="创建时间" min-width="160" />
+        <el-table-column label="操作" width="250" fixed="right">
+          <template #default="{ row }">
+            <div class="table-actions">
+              <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="Setting" @click="handlePermission(row)">权限</CrudButton>
+              <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="Edit" @click="handleEdit(row)">编辑</CrudButton>
+              <CrudButton style-type="primary" size-variant="table" tone="red" :icon="Delete" @click="handleDelete(row)">删除</CrudButton>
+            </div>
+          </template>
+        </el-table-column>
+      </CrudTable>
+    </el-card>
 
-  const loading = ref(false)
-  const submitLoading = ref(false)
-  const dialogVisible = ref(false)
-  const permissionDialogVisible = ref(false)
-  const permissionLoading = ref(false)
-  const permissionSubmitLoading = ref(false)
-  const dialogTitle = ref('新增角色')
-  const permissionDialogTitle = ref('权限配置')
-  const formRef = ref(null)
-  const treeRef = ref(null)
-  const currentPermissionRoleId = ref(null)
-  const permissionParentMap = ref(new Map())
+    <CrudFormDialog
+      ref="formDialogRef"
+      v-model="dialogVisible"
+      :title="dialogTitle"
+      width="600px"
+      :form-model="formData"
+      :rules="rules"
+      label-width="100px"
+      :confirm-loading="submitLoading"
+      @submit="handleSubmit"
+      @close="handleDialogClose"
+    >
+      <el-form-item label="角色名称" prop="name">
+        <el-input v-model="formData.name" placeholder="请输入角色名称" maxlength="50" />
+      </el-form-item>
+      <el-form-item label="角色编码" prop="code">
+        <el-input v-model="formData.code" placeholder="请输入角色编码" maxlength="50" :disabled="!!formData.id" />
+      </el-form-item>
+      <el-form-item label="描述" prop="description">
+        <el-input v-model="formData.description" type="textarea" placeholder="请输入描述" :rows="3" maxlength="200" />
+      </el-form-item>
+      <el-form-item label="数据权限" prop="dataScope">
+        <el-select v-model="formData.dataScope" placeholder="请选择数据权限范围">
+          <el-option label="全部数据" :value="1" />
+          <el-option label="本部门及以下" :value="2" />
+          <el-option label="本部门" :value="3" />
+          <el-option label="仅本人" :value="4" />
+          <el-option label="自定义" :value="5" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="排序" prop="sort">
+        <el-input-number v-model="formData.sort" :min="0" :max="9999" />
+      </el-form-item>
+      <el-form-item label="状态" prop="status">
+        <el-radio-group v-model="formData.status">
+          <el-radio :value="1">启用</el-radio>
+          <el-radio :value="0">禁用</el-radio>
+        </el-radio-group>
+      </el-form-item>
+    </CrudFormDialog>
 
-  const searchForm = reactive({
-    name: '',
-    code: '',
-    status: null
-  })
+    <el-dialog
+      v-model="permissionDialogVisible"
+      :title="permissionDialogTitle"
+      width="600px"
+      @close="handlePermissionDialogClose"
+    >
+      <div v-loading="permissionLoading" class="permission-tree-wrapper">
+        <el-empty
+          v-if="!permissionLoading && permissionTree.length === 0"
+          description="暂无可配置的菜单权限"
+        />
+        <el-tree
+          v-else
+          ref="treeRef"
+          :data="permissionTree"
+          :props="{ label: 'label', children: 'children' }"
+          show-checkbox
+          node-key="id"
+          default-expand-all
+          check-strictly
+          :check-on-click-node="true"
+          :default-checked-keys="checkedKeys"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="permissionDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="permissionSubmitLoading" @click="handlePermissionSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
 
-  const pagination = reactive({
-    page: 1,
-    pageSize: 10,
-    total: 0
-  })
+<script setup>
+import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Edit, Files, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue'
+import CrudButton from '../../components/crud/CrudButton.vue'
+import CrudFormDialog from '../../components/crud/CrudFormDialog.vue'
+import CrudTable from '../../components/crud/CrudTable.vue'
+import CrudToolbar from '../../components/crud/CrudToolbar.vue'
+import {
+  getRoleList,
+  createRole,
+  updateRole,
+  deleteRole,
+  updateRoleStatus,
+  getRoleDetail,
+  setRoleMenu
+} from '../../api/role'
+import { getMenuList } from '../../api/menu'
 
-  const tableData = ref([])
+const loading = ref(false)
+const submitLoading = ref(false)
+const dialogVisible = ref(false)
+const permissionDialogVisible = ref(false)
+const permissionLoading = ref(false)
+const permissionSubmitLoading = ref(false)
+const dialogTitle = ref('新增角色')
+const permissionDialogTitle = ref('权限配置')
+const formDialogRef = ref(null)
+const treeRef = ref(null)
+const currentPermissionRoleId = ref(null)
+const permissionParentMap = ref(new Map())
 
-  const formData = reactive({
-    id: null,
-    name: '',
-    code: '',
-    description: '',
-    dataScope: 1,
-    sort: 0,
-    status: 1
-  })
+const searchForm = reactive({
+  name: '',
+  code: '',
+  status: null
+})
 
-  const rules = {
-    name: [
-      { required: true, message: '请输入角色名称', trigger: 'blur' },
-      { max: 50, message: '角色名称不能超过50个字符', trigger: 'blur' }
-    ],
-    code: [
-      { required: true, message: '请输入角色编码', trigger: 'blur' },
-      { max: 50, message: '角色编码不能超过50个字符', trigger: 'blur' },
-      { pattern: /^[a-zA-Z_][a-zA-Z0-9_]*$/, message: '角色编码只能包含字母、数字和下划线，且不能以数字开头', trigger:
-  'blur' }
-    ],
-    description: [
-      { max: 200, message: '描述不能超过200个字符', trigger: 'blur' }
-    ],
-    dataScope: [
-      { required: true, message: '请选择数据权限范围', trigger: 'change' }
-    ],
-    sort: [
-      { required: true, message: '请输入排序值', trigger: 'blur' }
-    ]
-  }
+const pagination = reactive({
+  page: 1,
+  pageSize: 10,
+  total: 0
+})
 
-  const permissionTree = ref([])
+const tableData = ref([])
 
-  const checkedKeys = ref([])
+const formData = reactive({
+  id: null,
+  name: '',
+  code: '',
+  description: '',
+  dataScope: 1,
+  sort: 0,
+  status: 1
+})
+
+const rules = {
+  name: [
+    { required: true, message: '请输入角色名称', trigger: 'blur' },
+    { max: 50, message: '角色名称不能超过50个字符', trigger: 'blur' }
+  ],
+  code: [
+    { required: true, message: '请输入角色编码', trigger: 'blur' },
+    { max: 50, message: '角色编码不能超过50个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z_][a-zA-Z0-9_]*$/, message: '角色编码只能包含字母、数字和下划线，且不能以数字开头', trigger: 'blur' }
+  ],
+  description: [
+    { max: 200, message: '描述不能超过200个字符', trigger: 'blur' }
+  ],
+  dataScope: [
+    { required: true, message: '请选择数据权限范围', trigger: 'change' }
+  ],
+  sort: [
+    { required: true, message: '请输入排序值', trigger: 'blur' }
+  ]
+}
+
+const permissionTree = ref([])
+
+const checkedKeys = ref([])
 
   const buildPermissionTree = (menus = [], parentId = null) => {
     return menus
@@ -403,9 +416,9 @@
 
   // 提交表单
   const handleSubmit = async () => {
-    if (!formRef.value) return
+    if (!formDialogRef.value) return
 
-    await formRef.value.validate(async (valid) => {
+    await formDialogRef.value.validate(async (valid) => {
       if (valid) {
         submitLoading.value = true
         try {
@@ -470,7 +483,7 @@
 
   // 对话框关闭
   const handleDialogClose = () => {
-    formRef.value?.resetFields()
+    formDialogRef.value?.resetFields()
     Object.assign(formData, {
       id: null,
       name: '',
@@ -494,30 +507,56 @@
   onMounted(() => {
     fetchRoleList()
   })
-  </script>
+</script>
 
-  <style scoped>
-  .role-management {
-    padding: 0;
-  }
+<style scoped>
+.role-management {
+  padding: 0;
+}
 
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
+.role-card {
+  border: none;
+  border-radius: 20px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+}
 
-  .search-bar {
-    margin-bottom: 20px;
-  }
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
 
-  .pagination {
-    margin-top: 20px;
-    display: flex;
-    justify-content: flex-end;
-  }
+.card-title-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2a37;
+  font-weight: 700;
+}
 
-  .permission-tree-wrapper {
-    min-height: 240px;
+.role-breadcrumb {
+  color: #8a9aae;
+}
+
+.toolbar-input {
+  width: 220px;
+}
+
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.permission-tree-wrapper {
+  min-height: 240px;
+}
+
+@media (max-width: 960px) {
+  .toolbar-input {
+    width: 100%;
   }
-  </style>
+}
+</style>

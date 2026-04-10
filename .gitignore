@@ -23,6 +23,7 @@ venv/
 ENV/
 env/
 backend/.venv/
+backend/.venv-fastapi/
 
 # Local uploads and generated artifacts
 uploads/

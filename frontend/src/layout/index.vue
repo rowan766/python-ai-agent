@@ -1,50 +1,107 @@
 <template>
-  <el-container class="layout-container">
-    <el-aside :width="isCollapse ? '64px' : '200px'" class="layout-aside">
-      <div class="logo">
-        <span v-if="!isCollapse">后台管理</span>
-        <span v-else>后台</span>
+  <el-container class="layout-shell">
+    <el-aside :width="isCollapse ? '72px' : '232px'" class="layout-aside">
+      <div class="brand-panel">
+        <div class="brand-mark">
+          <el-icon><Grid /></el-icon>
+        </div>
+        <div v-if="!isCollapse" class="brand-copy">
+          <strong>智慧养护</strong>
+          <span>Admin Console</span>
+        </div>
       </div>
-      <el-menu
-        :default-active="activeMenu"
-        :default-openeds="defaultOpeneds"
-        :collapse="isCollapse"
-        :collapse-transition="false"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#ffffff"
-        router
-        class="layout-menu"
-      >
-        <SidebarMenuItem
-          v-for="menu in menuTree"
-          :key="menu.id"
-          :item="menu"
-        />
-      </el-menu>
+
+      <el-scrollbar class="sidebar-scroll">
+        <el-menu
+          :default-active="activeMenu"
+          :default-openeds="defaultOpeneds"
+          :collapse="isCollapse"
+          :collapse-transition="false"
+          router
+          class="layout-menu"
+        >
+          <SidebarMenuItem
+            v-for="menu in menuTree"
+            :key="menu.id"
+            :item="menu"
+          />
+        </el-menu>
+      </el-scrollbar>
     </el-aside>
 
-    <el-container>
+    <el-container class="layout-content">
       <el-header class="layout-header">
-        <div class="header-left">
-          <el-icon class="collapse-icon" @click="toggleCollapse">
-            <Expand v-if="isCollapse" />
-            <Fold v-else />
-          </el-icon>
+        <div class="header-topbar">
+          <div class="header-left">
+            <button class="icon-button" type="button" @click="toggleCollapse">
+              <el-icon>
+                <Expand v-if="isCollapse" />
+                <Fold v-else />
+              </el-icon>
+            </button>
+
+            <div class="header-breadcrumb">
+              <el-breadcrumb separator="/">
+                <el-breadcrumb-item
+                  v-for="item in breadcrumbItems"
+                  :key="item.path"
+                >
+                  {{ item.title }}
+                </el-breadcrumb-item>
+              </el-breadcrumb>
+            </div>
+          </div>
+
+          <div class="header-right">
+            <el-tooltip content="刷新页面" placement="bottom">
+              <button class="icon-button icon-button--compact" type="button" @click="refreshCurrentRoute">
+                <el-icon><RefreshRight /></el-icon>
+              </button>
+            </el-tooltip>
+
+            <el-tooltip content="全屏" placement="bottom">
+              <button class="icon-button icon-button--compact" type="button" @click="toggleFullscreen">
+                <el-icon><FullScreen /></el-icon>
+              </button>
+            </el-tooltip>
+
+            <el-dropdown @command="handleCommand">
+              <button class="user-button" type="button">
+                <span class="user-avatar">
+                  <el-icon><UserFilled /></el-icon>
+                </span>
+                <span class="user-name">{{ userStore.username }}</span>
+                <el-icon class="user-arrow"><ArrowDown /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                  <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
-        <div class="header-right">
-          <el-dropdown @command="handleCommand">
-            <span class="user-dropdown">
-              <el-icon><UserFilled /></el-icon>
-              <span>{{ userStore.username }}</span>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+
+        <div class="route-tabs">
+          <button
+            v-for="tab in visitedTabs"
+            :key="tab.path"
+            type="button"
+            class="route-tab"
+            :class="{ 'route-tab--active': tab.path === route.path }"
+            @click="goToTab(tab)"
+            @contextmenu.prevent="openTabContextMenu($event, tab)"
+          >
+            <span>{{ tab.title }}</span>
+            <el-icon
+              v-if="tab.closable"
+              class="route-tab__close"
+              @click.stop="closeTab(tab)"
+            >
+              <Close />
+            </el-icon>
+          </button>
         </div>
       </el-header>
 
@@ -52,17 +109,59 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <teleport to="body">
+      <div
+        v-if="contextMenu.visible"
+        class="tab-context-menu"
+        :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+      >
+        <button type="button" class="tab-context-item" @click="handleTabMenuAction('refresh')">
+          <el-icon><RefreshRight /></el-icon>
+          <span>刷新页面</span>
+        </button>
+        <button type="button" class="tab-context-item" @click="handleTabMenuAction('closeCurrent')">
+          <el-icon><Close /></el-icon>
+          <span>关闭当前</span>
+        </button>
+        <button type="button" class="tab-context-item" @click="handleTabMenuAction('closeOthers')">
+          <el-icon><CircleClose /></el-icon>
+          <span>关闭其他</span>
+        </button>
+        <button type="button" class="tab-context-item" @click="handleTabMenuAction('closeLeft')">
+          <el-icon><Back /></el-icon>
+          <span>关闭左侧</span>
+        </button>
+        <button type="button" class="tab-context-item" @click="handleTabMenuAction('closeRight')">
+          <el-icon><Right /></el-icon>
+          <span>关闭右侧</span>
+        </button>
+        <button type="button" class="tab-context-item" @click="handleTabMenuAction('closeAll')">
+          <el-icon><RemoveFilled /></el-icon>
+          <span>全部关闭</span>
+        </button>
+      </div>
+    </teleport>
   </el-container>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import {
-  UserFilled,
+  ArrowDown,
+  Back,
+  CircleClose,
+  Close,
   Expand,
-  Fold
+  Fold,
+  FullScreen,
+  Grid,
+  RefreshRight,
+  RemoveFilled,
+  Right,
+  UserFilled
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
 import SidebarMenuItem from './SidebarMenuItem.vue'
@@ -73,12 +172,185 @@ const route = useRoute()
 const userStore = useUserStore()
 
 const isCollapse = ref(false)
+const visitedTabs = ref([])
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  tabPath: ''
+})
+const handleDocumentClick = () => hideTabContextMenu()
+const handleDocumentContextMenu = (event) => {
+  const target = event.target
+  if (!(target instanceof Element) || !target.closest('.route-tab')) {
+    hideTabContextMenu()
+  }
+}
+
 const activeMenu = computed(() => route.path)
 const menuTree = computed(() => getRenderableMenus(userStore.menus))
 const defaultOpeneds = computed(() => findOpenMenuIndexes(menuTree.value, route.path))
 
+const findMenuTrail = (menus, targetPath, parents = []) => {
+  for (const menu of menus) {
+    const currentTrail = [...parents, menu]
+    if (menu.routePath === targetPath || menu.path === targetPath) {
+      return currentTrail
+    }
+    if (menu.children?.length) {
+      const matched = findMenuTrail(menu.children, targetPath, currentTrail)
+      if (matched.length) {
+        return matched
+      }
+    }
+  }
+  return []
+}
+
+const breadcrumbItems = computed(() => {
+  const menuTrail = findMenuTrail(menuTree.value, route.path)
+  if (menuTrail.length) {
+    return menuTrail.map((menu) => ({
+      title: menu.title,
+      path: menu.routePath || menu.path || `menu-${menu.id}`
+    }))
+  }
+
+  if (route.meta?.title) {
+    return [{ title: route.meta.title, path: route.path }]
+  }
+
+  return [{ title: '首页', path: '/dashboard' }]
+})
+
+const buildTabItem = (currentRoute) => ({
+  path: currentRoute.path,
+  title: currentRoute.meta?.title || currentRoute.name || currentRoute.path,
+  closable: currentRoute.path !== '/dashboard'
+})
+
+const hideTabContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+watch(
+  () => route.path,
+  () => {
+    hideTabContextMenu()
+    if (!route.meta?.title) {
+      return
+    }
+
+    const exists = visitedTabs.value.find((item) => item.path === route.path)
+    if (!exists) {
+      visitedTabs.value.push(buildTabItem(route))
+    }
+  },
+  { immediate: true }
+)
+
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
+}
+
+const refreshCurrentRoute = () => {
+  window.location.reload()
+}
+
+const toggleFullscreen = async () => {
+  if (!document.fullscreenElement) {
+    await document.documentElement.requestFullscreen()
+    return
+  }
+  await document.exitFullscreen()
+}
+
+const goToTab = (tab) => {
+  if (tab.path !== route.path) {
+    router.push(tab.path)
+  }
+}
+
+const closeTab = (tab) => {
+  if (!tab.closable) {
+    return
+  }
+
+  const index = visitedTabs.value.findIndex((item) => item.path === tab.path)
+  if (index === -1) {
+    return
+  }
+
+  const wasActive = route.path === tab.path
+  visitedTabs.value.splice(index, 1)
+
+  if (wasActive) {
+    const nextTab = visitedTabs.value[index - 1] || visitedTabs.value[index] || visitedTabs.value[0]
+    router.push(nextTab?.path || '/dashboard')
+  }
+}
+
+const openTabContextMenu = (event, tab) => {
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    tabPath: tab.path
+  }
+}
+
+const getContextTabIndex = () => visitedTabs.value.findIndex((item) => item.path === contextMenu.value.tabPath)
+
+const ensureActiveTabExists = () => {
+  if (!visitedTabs.value.some((item) => item.path === route.path)) {
+    router.push(visitedTabs.value[visitedTabs.value.length - 1]?.path || '/dashboard')
+  }
+}
+
+const handleTabMenuAction = (action) => {
+  const currentIndex = getContextTabIndex()
+  if (currentIndex === -1) {
+    hideTabContextMenu()
+    return
+  }
+
+  const currentTab = visitedTabs.value[currentIndex]
+
+  if (action === 'refresh') {
+    hideTabContextMenu()
+    if (currentTab.path === route.path) {
+      refreshCurrentRoute()
+    } else {
+      router.push(currentTab.path)
+    }
+    return
+  }
+
+  if (action === 'closeCurrent') {
+    closeTab(currentTab)
+  }
+
+  if (action === 'closeOthers') {
+    visitedTabs.value = visitedTabs.value.filter((item) => item.path === currentTab.path || !item.closable)
+    router.push(currentTab.path)
+  }
+
+  if (action === 'closeLeft') {
+    visitedTabs.value = visitedTabs.value.filter((item, index) => index >= currentIndex || !item.closable)
+    ensureActiveTabExists()
+  }
+
+  if (action === 'closeRight') {
+    visitedTabs.value = visitedTabs.value.filter((item, index) => index <= currentIndex || !item.closable)
+    ensureActiveTabExists()
+  }
+
+  if (action === 'closeAll') {
+    visitedTabs.value = visitedTabs.value.filter((item) => !item.closable)
+    router.push('/dashboard')
+  }
+
+  hideTabContextMenu()
 }
 
 const handleCommand = async (command) => {
@@ -90,6 +362,7 @@ const handleCommand = async (command) => {
         type: 'warning'
       })
       userStore.logout()
+      visitedTabs.value = []
       ElMessage.success('退出成功')
       router.push('/login')
     } catch (error) {
@@ -99,42 +372,83 @@ const handleCommand = async (command) => {
     router.push('/profile')
   }
 }
+
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('contextmenu', handleDocumentContextMenu)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
+  document.removeEventListener('contextmenu', handleDocumentContextMenu)
+})
 </script>
 
 <style scoped>
-.layout-container {
+.layout-shell {
   height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(79, 157, 255, 0.08), transparent 24%),
+    linear-gradient(180deg, #f6f8fb 0%, #f1f5f9 100%);
 }
 
 .layout-aside {
-  background: linear-gradient(180deg, #2c3a4d 0%, #243244 100%);
-  transition: width 0.3s;
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, #2b384b 0%, #243143 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 14px 0 32px rgba(15, 23, 42, 0.08);
+  transition: width 0.28s ease;
 }
 
-.logo {
-  height: 60px;
-  line-height: 60px;
-  text-align: center;
-  font-size: 20px;
-  font-weight: bold;
-  color: white;
-  letter-spacing: 0.06em;
-  background: rgba(14, 23, 38, 0.24);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+.brand-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 66px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%);
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 10px 20px rgba(47, 126, 247, 0.25);
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-copy strong {
+  color: #f8fbff;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.brand-copy span {
+  color: #93a7be;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.sidebar-scroll {
+  height: calc(100vh - 66px);
 }
 
 .layout-menu {
+  padding: 12px 10px 20px;
   border-right: none;
   background: transparent;
-  --menu-bg-hover: #35465d;
-  --menu-bg-active: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%);
-  --menu-text: #bfcbd9;
-  --menu-text-muted: #8fa3ba;
 }
 
 .layout-menu:not(.el-menu--collapse) {
-  width: 200px;
+  width: 232px;
 }
 
 :deep(.el-menu) {
@@ -143,113 +457,243 @@ const handleCommand = async (command) => {
 }
 
 :deep(.el-sub-menu .el-menu) {
-  background: rgba(17, 26, 39, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  background: rgba(8, 15, 25, 0.16);
 }
 
 :deep(.el-menu-item),
 :deep(.el-sub-menu__title) {
-  height: 48px;
-  margin: 6px 10px;
-  border-radius: 12px;
-  color: var(--menu-text);
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease,
-    box-shadow 0.2s ease;
+  height: 42px;
+  margin: 4px 6px;
+  border-radius: 8px;
+  color: #b9c8d8;
+  transition: all 0.18s ease;
 }
 
 :deep(.el-menu-item:hover),
 :deep(.el-sub-menu__title:hover) {
-  background: var(--menu-bg-hover) !important;
-  color: #ffffff;
-  transform: translateX(2px);
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }
 
 :deep(.el-menu-item.is-active) {
-  background: var(--menu-bg-active) !important;
-  color: #ffffff;
-  box-shadow: 0 10px 24px rgba(47, 126, 247, 0.28);
-}
-
-:deep(.el-sub-menu.is-active > .el-sub-menu__title),
-:deep(.el-sub-menu.is-opened > .el-sub-menu__title) {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: #ffffff;
+  background: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(47, 126, 247, 0.2);
 }
 
 :deep(.el-sub-menu .el-menu-item) {
   min-width: auto;
-  margin: 4px 10px 4px 18px;
-  padding-left: 40px !important;
-  color: var(--menu-text-muted);
-  background: transparent !important;
-}
-
-:deep(.el-sub-menu .el-menu-item:hover) {
-  background: rgba(79, 157, 255, 0.14) !important;
-  color: #ffffff;
+  margin-left: 16px;
+  color: #93a7be;
 }
 
 :deep(.el-sub-menu .el-menu-item.is-active) {
-  background: linear-gradient(135deg, rgba(79, 157, 255, 0.22) 0%, rgba(47, 126, 247, 0.36) 100%) !important;
-  color: #ffffff;
+  background: rgba(79, 157, 255, 0.18) !important;
+  color: #ffffff !important;
   box-shadow: inset 3px 0 0 #74b4ff;
 }
 
-:deep(.el-menu-item .el-icon),
-:deep(.el-sub-menu__title .el-icon) {
-  color: inherit;
+:deep(.el-sub-menu__icon-arrow) {
+  color: #b5c2d1;
 }
 
-:deep(.el-sub-menu__icon-arrow) {
-  color: rgba(255, 255, 255, 0.72);
+.layout-content {
+  min-width: 0;
 }
 
 .layout-header {
+  height: auto;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid #e7edf4;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.04);
+}
+
+.header-topbar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  background-color: white;
-  border-bottom: 1px solid #e6e6e6;
-  padding: 0 20px;
+  gap: 14px;
+  padding: 12px 18px 8px;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.collapse-icon {
-  font-size: 20px;
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.collapse-icon:hover {
-  color: #409eff;
-}
-
+.header-left,
 .header-right {
   display: flex;
   align-items: center;
+  gap: 10px;
 }
 
-.user-dropdown {
-  display: flex;
+.header-breadcrumb {
+  color: #6b7b91;
+  font-size: 13px;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5ebf3;
+  border-radius: 6px;
+  background: #fff;
+  color: #587089;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.icon-button--compact {
+  width: 30px;
+  height: 30px;
+}
+
+.icon-button:hover {
+  border-color: #d6e0ec;
+  background: #f7f9fc;
+  color: #4c6178;
+}
+
+.icon-button:focus-visible,
+.user-button:focus-visible,
+.route-tab:focus-visible,
+.tab-context-item:focus-visible {
+  outline: 2px solid rgba(47, 126, 247, 0.18);
+  outline-offset: 1px;
+}
+
+.user-button {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 8px 4px 6px;
+  border: 1px solid #e8eef6;
+  border-radius: 6px;
+  background: #fff;
   cursor: pointer;
-  padding: 5px 10px;
-  border-radius: 4px;
-  transition: background-color 0.3s;
+  color: #334155;
+  transition: all 0.18s ease;
 }
 
-.user-dropdown:hover {
-  background-color: #f5f7fa;
+.user-button:hover {
+  border-color: #d6e0ec;
+  background: #f7f9fc;
+  color: #334155;
+}
+
+.user-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #d9ecff 0%, #eef6ff 100%);
+  color: #2f7ef7;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.user-arrow {
+  color: #8ea2b8;
+  font-size: 12px;
+}
+
+.route-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 18px 10px;
+  overflow-x: auto;
+}
+
+.route-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid #dfe5ee;
+  border-radius: 4px;
+  background: #fff;
+  color: #63788f;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12px;
+  transition: all 0.18s ease;
+}
+
+.route-tab:hover {
+  color: #52687f;
+  border-color: #d6e0ec;
+  background: #f7f9fc;
+}
+
+.route-tab--active {
+  color: #fff;
+  background: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%);
+  border-color: transparent;
+}
+
+.route-tab__close {
+  font-size: 11px;
+  border-radius: 999px;
 }
 
 .layout-main {
-  background-color: #f0f2f5;
-  padding: 20px;
+  padding: 16px;
+  background: transparent;
+}
+
+.tab-context-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 144px;
+  padding: 6px 0;
+  border: 1px solid #e6ebf2;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+}
+
+.tab-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-context-item:hover {
+  background: #f5f8fc;
+}
+
+@media (max-width: 960px) {
+  .layout-shell {
+    display: block;
+  }
+
+  .layout-aside {
+    display: none;
+  }
+
+  .header-topbar {
+    padding: 12px 12px 8px;
+  }
+
+  .route-tabs {
+    padding: 0 12px 10px;
+  }
+
+  .layout-main {
+    padding: 12px;
+  }
 }
 </style>

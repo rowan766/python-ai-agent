@@ -30,10 +30,12 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="200" align="center">
+              <el-table-column label="操作" width="180" align="center">
                 <template #default="{ row }">
-                  <el-button type="primary" size="small" link :icon="Edit" @click="handleEditType(row)">编辑</el-button>
-                  <el-button type="danger" size="small" link :icon="Delete" @click="handleDeleteType(row)">删除</el-button>
+                  <div class="table-actions">
+                    <el-button class="table-action-btn" type="primary" size="small" :icon="Edit" @click="handleEditType(row)">编辑</el-button>
+                    <el-button class="table-action-btn" type="danger" size="small" :icon="Delete" @click="handleDeleteType(row)">删除</el-button>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -96,10 +98,12 @@
                     />
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="150" align="center">
+                <el-table-column label="操作" width="180" align="center">
                   <template #default="{ row }">
-                    <el-button type="primary" size="small" link :icon="Edit" @click="handleEditData(row)">编辑</el-button>
-                    <el-button type="danger" size="small" link :icon="Delete" @click="handleDeleteData(row)">删除</el-button>
+                    <div class="table-actions">
+                      <el-button class="table-action-btn" type="primary" size="small" :icon="Edit" @click="handleEditData(row)">编辑</el-button>
+                      <el-button class="table-action-btn" type="danger" size="small" :icon="Delete" @click="handleDeleteData(row)">删除</el-button>
+                    </div>
                   </template>
                 </el-table-column>
               </el-table>
@@ -667,6 +671,19 @@
     margin-top: 20px;
     display: flex;
     justify-content: flex-end;
+  }
+
+  .table-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .table-action-btn {
+    min-height: 28px;
+    padding: 5px 10px;
+    border-radius: 4px;
   }
 
   :deep(.el-table__body tr.current-row > td) {

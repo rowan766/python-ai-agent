@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import paginated_response, success_response
 from app.core.security import hash_password, verify_password
-from app.models import Menu, Role, RoleMenu, User, UserRole
+from app.models import Department, Menu, Role, RoleMenu, User, UserRole
 from app.schemas import (
     AssignRolesRequest,
     ChangePasswordRequest,
@@ -52,6 +52,14 @@ def _assert_username_unique(db: DbSession, username: str, exclude_user_id: int |
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名已存在")
 
 
+def _collect_department_ids(db: DbSession, department_id: int) -> list[int]:
+    children = db.scalars(select(Department.id).where(Department.parent_id == department_id)).all()
+    result = [department_id]
+    for child_id in children:
+        result.extend(_collect_department_ids(db, child_id))
+    return result
+
+
 @router.get("")
 def get_user_list(
     db: DbSession,
@@ -60,12 +68,15 @@ def get_user_list(
     pageSize: int = Query(default=10, ge=1, le=1000),
     username: str | None = None,
     email: str | None = None,
+    departmentId: int | None = None,
 ) -> dict:
     filters = []
     if username:
         filters.append(User.username.ilike(f"%{username.strip()}%"))
     if email:
         filters.append(User.email.ilike(f"%{email.strip()}%"))
+    if departmentId is not None:
+        filters.append(User.department_id.in_(_collect_department_ids(db, departmentId)))
 
     total = db.scalar(select(func.count()).select_from(User).where(*filters)) or 0
     users = (

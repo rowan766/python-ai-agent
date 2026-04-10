@@ -1,65 +1,150 @@
 <template>
   <div class="user-management">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>用户管理</span>
-          <el-button type="primary" :icon="Plus" @click="handleAdd">新增用户</el-button>
+    <div class="user-layout">
+      <el-card class="department-panel" shadow="never">
+        <template #header>
+          <div class="panel-header">
+            <div class="panel-title">
+              <el-icon><OfficeBuilding /></el-icon>
+              <span>部门树</span>
+            </div>
+            <el-button link type="primary" @click="handleSelectAllDepartments">全部部门</el-button>
+          </div>
+        </template>
+
+        <el-input
+          v-model="departmentKeyword"
+          placeholder="请输入部门名称"
+          clearable
+          class="department-search"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+
+        <el-scrollbar class="department-tree-scroll">
+          <el-tree
+            ref="departmentTreeRef"
+            :data="departmentTree"
+            :props="{ label: 'name', children: 'children' }"
+            node-key="id"
+            default-expand-all
+            highlight-current
+            :expand-on-click-node="false"
+            :filter-node-method="filterDepartmentNode"
+            @node-click="handleDepartmentNodeClick"
+          />
+        </el-scrollbar>
+      </el-card>
+
+      <el-card class="user-table-panel" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <div class="card-header__title">
+              <div class="card-title-main">
+                <el-icon><UserFilled /></el-icon>
+                <span>用户管理</span>
+              </div>
+              <el-tag v-if="selectedDepartmentName" type="primary" effect="plain">
+                {{ selectedDepartmentName }}
+              </el-tag>
+            </div>
+
+            <el-breadcrumb separator="/" class="user-breadcrumb">
+              <el-breadcrumb-item>首页</el-breadcrumb-item>
+              <el-breadcrumb-item>系统管理</el-breadcrumb-item>
+              <el-breadcrumb-item>用户管理</el-breadcrumb-item>
+            </el-breadcrumb>
+          </div>
+        </template>
+
+        <div class="toolbar-shell">
+          <div class="search-bar">
+            <el-form :inline="true" :model="searchForm">
+              <el-form-item>
+                <el-input v-model="searchForm.username" placeholder="请输入用户名" clearable class="toolbar-input">
+                  <template #prefix>
+                    <el-icon><User /></el-icon>
+                  </template>
+                </el-input>
+              </el-form-item>
+              <el-form-item>
+                <el-input v-model="searchForm.email" placeholder="请输入邮箱" clearable class="toolbar-input">
+                  <template #prefix>
+                    <el-icon><Message /></el-icon>
+                  </template>
+                </el-input>
+              </el-form-item>
+              <el-form-item>
+                <el-button class="toolbar-btn toolbar-btn--search" :icon="Search" @click="handleSearch">搜索</el-button>
+                <el-button class="toolbar-btn" :icon="Refresh" @click="handleReset">重置</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+
+          <div class="action-toolbar">
+            <el-button class="action-btn action-btn--blue" :icon="Plus" @click="handleAdd">新增</el-button>
+            <el-button class="action-btn action-btn--green" :icon="EditPen" :disabled="selectedRows.length !== 1" @click="handleEditSelected">修改</el-button>
+            <el-button class="action-btn action-btn--red" :icon="Delete" :disabled="selectedRows.length !== 1" @click="handleDeleteSelected">删除</el-button>
+            <el-button class="action-btn action-btn--gray" :icon="Upload" @click="handleImport">导入</el-button>
+            <el-button class="action-btn action-btn--amber" :icon="Download" @click="handleExport">导出</el-button>
+          </div>
         </div>
-      </template>
 
-      <div class="search-bar">
-        <el-form :inline="true" :model="searchForm">
-          <el-form-item label="用户名">
-            <el-input v-model="searchForm.username" placeholder="请输入用户名" clearable />
-          </el-form-item>
-          <el-form-item label="邮箱">
-            <el-input v-model="searchForm.email" placeholder="请输入邮箱" clearable />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
-            <el-button :icon="Refresh" @click="handleReset">重置</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
+        <el-table
+          :data="tableData"
+          class="user-table"
+          style="width: 100%"
+          v-loading="loading"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column type="selection" width="54" align="center" />
+          <el-table-column prop="id" label="用户编号" width="110" align="center" />
+          <el-table-column prop="username" label="用户名" min-width="140" />
+          <el-table-column prop="email" label="邮箱" min-width="220" />
+          <el-table-column prop="departmentName" label="部门" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="roleNames" label="角色" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="120" align="center">
+            <template #default="{ row }">
+              <el-switch
+                v-model="row.status"
+                :active-value="1"
+                :inactive-value="0"
+                @change="handleStatusChange(row)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="创建时间" min-width="180" align="center" />
+          <el-table-column label="操作" width="250" fixed="right" align="center">
+            <template #default="{ row }">
+              <div class="table-actions">
+                <el-button class="table-action-btn" type="primary" size="small" :icon="UserFilled" @click="handleAssignRoles(row)">角色</el-button>
+                <el-button class="table-action-btn" type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+                <el-button class="table-action-btn" type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
 
-      <el-table :data="tableData" border style="width: 100%" v-loading="loading">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column prop="departmentName" label="所属部门" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="roleNames" label="角色" width="160" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'">
-              {{ row.status === 1 ? '正常' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" min-width="180" />
-        <el-table-column label="操作" width="290" fixed="right">
-          <template #default="{ row }">
-            <el-button type="warning" size="small" :icon="UserFilled" @click="handleAssignRoles(row)">角色</el-button>
-            <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        <div class="pagination">
+          <div class="table-summary">
+            <el-icon><Files /></el-icon>
+            <span>共 {{ pagination.total }} 条</span>
+          </div>
+          <el-pagination
+            v-model:current-page="pagination.page"
+            v-model:page-size="pagination.pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="sizes, prev, pager, next, jumper"
+            :total="pagination.total"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+          />
+        </div>
+      </el-card>
+    </div>
 
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="pagination.total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
-    </el-card>
-
-    <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
@@ -142,9 +227,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Refresh, Edit, Delete, UserFilled } from '@element-plus/icons-vue'
+import {
+  Delete,
+  Download,
+  Edit,
+  EditPen,
+  Files,
+  Message,
+  OfficeBuilding,
+  Plus,
+  Refresh,
+  Search,
+  Upload,
+  User,
+  UserFilled
+} from '@element-plus/icons-vue'
 import { getUserList, createUser, updateUser, deleteUser, getUserDetail, assignUserRoles } from '../../api/user'
 import { getDepartmentList } from '../../api/department'
 import { getRoleList } from '../../api/role'
@@ -154,7 +253,12 @@ const submitLoading = ref(false)
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增用户')
 const formRef = ref(null)
+const departmentTreeRef = ref(null)
 const departmentTree = ref([])
+const departmentKeyword = ref('')
+const selectedDepartmentId = ref(null)
+const selectedDepartmentName = ref('')
+const selectedRows = ref([])
 const roleDialogVisible = ref(false)
 const roleDialogTitle = ref('分配角色')
 const roleDialogLoading = ref(false)
@@ -205,14 +309,38 @@ const rules = {
   ]
 }
 
-// 获取用户列表
+const findDepartmentName = (nodes, id) => {
+  for (const node of nodes) {
+    if (node.id === id) {
+      return node.name
+    }
+    if (node.children?.length) {
+      const childName = findDepartmentName(node.children, id)
+      if (childName) {
+        return childName
+      }
+    }
+  }
+  return ''
+}
+
+const filterDepartmentNode = (value, data) => {
+  if (!value) return true
+  return data.name?.includes(value)
+}
+
+watch(departmentKeyword, (value) => {
+  departmentTreeRef.value?.filter(value)
+})
+
 const fetchUserList = async () => {
   loading.value = true
   try {
     const params = {
       page: pagination.page,
       pageSize: pagination.pageSize,
-      ...searchForm
+      ...searchForm,
+      ...(selectedDepartmentId.value ? { departmentId: selectedDepartmentId.value } : {})
     }
     const res = await getUserList(params)
     const users = res.data?.list || res.data || res.list || []
@@ -223,27 +351,9 @@ const fetchUserList = async () => {
     }))
     pagination.total = res.data?.total || res.total || tableData.value.length
   } catch (error) {
-    ElMessage.error('获取用户列表失败')
-    // 使用模拟数据
-    tableData.value = [
-      {
-        id: 1,
-        username: 'admin',
-        email: 'admin@example.com',
-        roleNames: '管理员',
-        status: 1,
-        createdAt: '2024-11-01 10:00:00'
-      },
-      {
-        id: 2,
-        username: 'user1',
-        email: 'user1@example.com',
-        roleNames: '普通用户',
-        status: 1,
-        createdAt: '2024-11-02 11:00:00'
-      }
-    ]
-    pagination.total = 2
+    ElMessage.error(error.message || '获取用户列表失败')
+    tableData.value = []
+    pagination.total = 0
   } finally {
     loading.value = false
   }
@@ -259,26 +369,41 @@ const fetchDepartmentTree = async () => {
   }
 }
 
-// 搜索
+const handleDepartmentNodeClick = (node) => {
+  selectedDepartmentId.value = node.id
+  selectedDepartmentName.value = node.name
+  pagination.page = 1
+  fetchUserList()
+}
+
+const handleSelectAllDepartments = () => {
+  selectedDepartmentId.value = null
+  selectedDepartmentName.value = ''
+  departmentTreeRef.value?.setCurrentKey(null)
+  pagination.page = 1
+  fetchUserList()
+}
+
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
 const handleSearch = () => {
   pagination.page = 1
   fetchUserList()
 }
 
-// 重置
 const handleReset = () => {
   searchForm.username = ''
   searchForm.email = ''
   handleSearch()
 }
 
-// 新增
 const handleAdd = () => {
   dialogTitle.value = '新增用户'
   dialogVisible.value = true
 }
 
-// 编辑
 const handleEdit = (row) => {
   dialogTitle.value = '编辑用户'
   Object.assign(formData, {
@@ -290,6 +415,12 @@ const handleEdit = (row) => {
     status: row.status ?? 1
   })
   dialogVisible.value = true
+}
+
+const handleEditSelected = () => {
+  if (selectedRows.value.length === 1) {
+    handleEdit(selectedRows.value[0])
+  }
 }
 
 const fetchRoleOptions = async () => {
@@ -326,7 +457,6 @@ const handleAssignRoles = async (row) => {
   }
 }
 
-// 删除
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该用户吗?', '提示', {
@@ -339,8 +469,37 @@ const handleDelete = async (row) => {
     fetchUserList()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(error.message || '删除失败')
     }
+  }
+}
+
+const handleDeleteSelected = async () => {
+  if (selectedRows.value.length === 1) {
+    await handleDelete(selectedRows.value[0])
+  }
+}
+
+const handleImport = () => {
+  ElMessage.info('导入功能后续接入')
+}
+
+const handleExport = () => {
+  ElMessage.info('导出功能后续接入')
+}
+
+const handleStatusChange = async (row) => {
+  try {
+    await updateUser(row.id, {
+      username: row.username,
+      email: row.email,
+      departmentId: row.departmentId,
+      status: row.status
+    })
+    ElMessage.success('状态更新成功')
+  } catch (error) {
+    row.status = row.status === 1 ? 0 : 1
+    ElMessage.error(error.message || '状态更新失败')
   }
 }
 
@@ -360,7 +519,6 @@ const handleRoleSubmit = async () => {
   }
 }
 
-// 提交
 const handleSubmit = async () => {
   if (!formRef.value) return
 
@@ -396,14 +554,13 @@ const handleSubmit = async () => {
   })
 }
 
-// 对话框关闭
 const handleDialogClose = () => {
   formRef.value?.resetFields()
   Object.assign(formData, {
     id: null,
     username: '',
     email: '',
-    departmentId: null,
+    departmentId: selectedDepartmentId.value || null,
     password: '',
     status: 1
   })
@@ -415,7 +572,6 @@ const handleRoleDialogClose = () => {
   selectedRoleIds.value = []
 }
 
-// 分页
 const handleSizeChange = () => {
   fetchUserList()
 }
@@ -424,9 +580,12 @@ const handleCurrentChange = () => {
   fetchUserList()
 }
 
-onMounted(() => {
-  fetchDepartmentTree()
-  fetchRoleOptions()
+onMounted(async () => {
+  await fetchDepartmentTree()
+  await fetchRoleOptions()
+  if (selectedDepartmentId.value) {
+    selectedDepartmentName.value = findDepartmentName(departmentTree.value, selectedDepartmentId.value)
+  }
   fetchUserList()
 })
 </script>
@@ -436,19 +595,204 @@ onMounted(() => {
   padding: 0;
 }
 
+.user-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.department-panel,
+.user-table-panel {
+  border: none;
+  border-radius: 20px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+}
+
+.department-panel {
+  min-height: 740px;
+}
+
+.panel-header,
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
-.search-bar {
-  margin-bottom: 20px;
+.panel-title,
+.card-title-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2a37;
+  font-weight: 700;
+}
+
+.card-header__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-breadcrumb {
+  color: #8a9aae;
+}
+
+.department-search {
+  margin-bottom: 12px;
+}
+
+.department-tree-scroll {
+  height: 642px;
+}
+
+.toolbar-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.search-bar :deep(.el-form) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.search-bar :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.toolbar-input {
+  width: 250px;
+}
+
+.toolbar-btn,
+.action-btn {
+  border-radius: 4px;
+  font-weight: 600;
+  min-height: 32px;
+  padding: 7px 12px;
+}
+
+.toolbar-btn--search {
+  background: #409eff;
+  border-color: #409eff;
+  color: #fff;
+}
+
+.action-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.action-btn {
+  border: 1px solid transparent;
+  padding: 7px 14px;
+}
+
+.action-btn--blue {
+  background: #e8f3ff;
+  border-color: #cfe4ff;
+  color: #2f7ef7;
+}
+
+.action-btn--green {
+  background: #edf9ee;
+  border-color: #d2f2d6;
+  color: #43a047;
+}
+
+.action-btn--red {
+  background: #fff1f0;
+  border-color: #ffd9d6;
+  color: #e85d57;
+}
+
+.action-btn--gray {
+  background: #f6f8fb;
+  border-color: #e5eaf1;
+  color: #6b7b91;
+}
+
+.action-btn--amber {
+  background: #fff7e8;
+  border-color: #ffe2ae;
+  color: #d9822b;
+}
+
+.user-table {
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.user-table :deep(.el-table__header-wrapper th) {
+  background: #f4f5f7;
+  color: #4b5563;
+  font-weight: 700;
+  border-bottom-color: #e5e7eb;
+}
+
+.user-table :deep(.el-table__row td) {
+  border-bottom-color: #edf2f7;
+}
+
+.user-table :deep(.el-table__row:hover td) {
+  background: #f7fbff !important;
+}
+
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.table-action-btn {
+  min-height: 28px;
+  padding: 5px 10px;
+  border-radius: 4px;
 }
 
 .pagination {
   margin-top: 20px;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.table-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7b8ba0;
+}
+
+@media (max-width: 960px) {
+  .user-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .department-panel {
+    min-height: auto;
+  }
+
+  .department-tree-scroll {
+    height: 280px;
+  }
+
+  .toolbar-input {
+    width: 100%;
+  }
+
+  .pagination {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

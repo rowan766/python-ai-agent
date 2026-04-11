@@ -30,6 +30,11 @@ export const assignUserRoles = (id, roleIds) => {
   return request.post(`/user/${id}/roles`, { roleIds })
 }
 
+// 管理员修改用户密码
+export const changeUserPassword = (id, data) => {
+  return request.post(`/user/${id}/password`, data)
+}
+
 // 更新当前登录用户资料
 export const updateCurrentUserProfile = (data) => {
   return request.put('/user/profile', data)

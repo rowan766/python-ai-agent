@@ -7,6 +7,7 @@ from app.core.http import paginated_response, success_response
 from app.core.security import hash_password, verify_password
 from app.models import Department, Menu, Role, RoleMenu, User, UserRole
 from app.schemas import (
+    AdminChangePasswordRequest,
     AssignRolesRequest,
     ChangePasswordRequest,
     ProfileUpdateRequest,
@@ -209,3 +210,21 @@ def assign_user_roles(user_id: int, payload: AssignRolesRequest, db: DbSession, 
         db.add(UserRole(user_id=user.id, role_id=role_id))
     db.commit()
     return success_response(serialize_user(_get_user_or_404(db, user.id)), message="角色分配成功")
+
+
+@router.post("/{user_id}/password", summary="修改用户密码")
+def change_user_password(
+    user_id: int,
+    payload: AdminChangePasswordRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    if user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请在个人中心修改当前登录用户密码")
+    if payload.newPassword != payload.confirmPassword:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="两次输入的新密码不一致")
+
+    user = _get_user_or_404(db, user_id)
+    user.password = hash_password(payload.newPassword)
+    db.commit()
+    return success_response(message="密码修改成功")

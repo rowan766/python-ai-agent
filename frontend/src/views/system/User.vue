@@ -109,11 +109,11 @@
         >
           <el-table-column type="selection" width="54" align="center" />
           <el-table-column prop="id" label="用户编号" width="110" align="center" />
-          <el-table-column prop="username" label="用户名" min-width="140" />
-          <el-table-column prop="email" label="邮箱" min-width="220" />
-          <el-table-column prop="departmentName" label="部门" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="roleNames" label="角色" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="status" label="状态" width="120" align="center">
+          <el-table-column prop="username" label="用户名" min-width="120" />
+          <el-table-column prop="email" label="邮箱" min-width="200" />
+          <el-table-column prop="departmentName" label="部门" min-width="100" show-overflow-tooltip />
+          <el-table-column prop="roleNames" label="角色" min-width="100" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="80" align="center">
             <template #default="{ row }">
               <el-switch
                 v-model="row.status"
@@ -124,11 +124,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="createdAt" label="创建时间" min-width="180" align="center" />
-          <el-table-column label="操作" width="250" fixed="right" align="center">
+          <el-table-column label="操作" width="360" fixed="right" align="center">
             <template #default="{ row }">
               <div class="table-actions">
                 <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="UserFilled" @click="handleAssignRoles(row)">角色</CrudButton>
                 <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="Edit" @click="handleEdit(row)">编辑</CrudButton>
+                <CrudButton style-type="primary" size-variant="table" tone="amber" :icon="Key" @click="handleChangePassword(row)">修改密码</CrudButton>
                 <CrudButton style-type="primary" size-variant="table" tone="red" :icon="Delete" @click="handleDelete(row)">删除</CrudButton>
               </div>
             </template>
@@ -210,6 +211,36 @@
         <el-button type="primary" :loading="roleSubmitLoading" @click="handleRoleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="passwordDialogVisible"
+      :title="passwordDialogTitle"
+      width="460px"
+      @close="handlePasswordDialogClose"
+    >
+      <el-form label-width="90px">
+        <el-form-item label="新密码">
+          <el-input
+            v-model="passwordForm.newPassword"
+            type="password"
+            placeholder="请输入新密码"
+            show-password
+          />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input
+            v-model="passwordForm.confirmPassword"
+            type="password"
+            placeholder="请再次输入新密码"
+            show-password
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="passwordSubmitLoading" @click="handlePasswordSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -222,6 +253,7 @@ import {
   Edit,
   EditPen,
   Files,
+  Key,
   Message,
   OfficeBuilding,
   Plus,
@@ -235,7 +267,7 @@ import CrudButton from '../../components/crud/CrudButton.vue'
 import CrudFormDialog from '../../components/crud/CrudFormDialog.vue'
 import CrudTable from '../../components/crud/CrudTable.vue'
 import CrudToolbar from '../../components/crud/CrudToolbar.vue'
-import { getUserList, createUser, updateUser, deleteUser, getUserDetail, assignUserRoles } from '../../api/user'
+import { getUserList, createUser, updateUser, deleteUser, getUserDetail, assignUserRoles, changeUserPassword } from '../../api/user'
 import { getDepartmentList } from '../../api/department'
 import { getRoleList } from '../../api/role'
 
@@ -257,6 +289,10 @@ const roleSubmitLoading = ref(false)
 const roleOptions = ref([])
 const selectedRoleIds = ref([])
 const currentRoleUserId = ref(null)
+const passwordDialogVisible = ref(false)
+const passwordDialogTitle = ref('修改密码')
+const passwordSubmitLoading = ref(false)
+const currentPasswordUserId = ref(null)
 
 const searchForm = reactive({
   username: '',
@@ -278,6 +314,11 @@ const formData = reactive({
   departmentId: null,
   password: '',
   status: 1
+})
+
+const passwordForm = reactive({
+  newPassword: '',
+  confirmPassword: ''
 })
 
 const departmentTreeOptions = computed(() => departmentTree.value)
@@ -471,6 +512,41 @@ const handleDeleteSelected = async () => {
   }
 }
 
+const handleChangePassword = (row) => {
+  currentPasswordUserId.value = row.id
+  passwordDialogTitle.value = `修改密码 - ${row.username}`
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
+  passwordDialogVisible.value = true
+}
+
+const handlePasswordSubmit = async () => {
+  if (!currentPasswordUserId.value) return
+  if (!passwordForm.newPassword) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  if (passwordForm.newPassword.length < 6) {
+    ElMessage.warning('密码长度不能少于6位')
+    return
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+
+  passwordSubmitLoading.value = true
+  try {
+    const res = await changeUserPassword(currentPasswordUserId.value, { ...passwordForm })
+    ElMessage.success(res.message || '密码修改成功')
+    passwordDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error(error.message || '密码修改失败')
+  } finally {
+    passwordSubmitLoading.value = false
+  }
+}
+
 const handleImport = () => {
   ElMessage.info('导入功能后续接入')
 }
@@ -561,6 +637,13 @@ const handleRoleDialogClose = () => {
   currentRoleUserId.value = null
   roleDialogTitle.value = '分配角色'
   selectedRoleIds.value = []
+}
+
+const handlePasswordDialogClose = () => {
+  currentPasswordUserId.value = null
+  passwordDialogTitle.value = '修改密码'
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
 }
 
 const handleSizeChange = () => {

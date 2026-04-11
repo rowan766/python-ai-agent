@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     access_token_ttl_seconds: int = 60 * 60 * 24
     captcha_ttl_seconds: int = 60 * 5
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    document_processing_mode: str = "worker"
+    document_chunk_size: int = 800
+    document_chunk_overlap: int = 120
     redis_url: str = "redis://127.0.0.1:6379/0"
     minio_endpoint: str = "127.0.0.1:9000"
     minio_access_key: str = "minioadmin"

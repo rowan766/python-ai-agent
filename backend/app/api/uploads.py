@@ -5,7 +5,8 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import success_response
-from app.models import FileRecord
+from app.models import Document, DocumentTask, FileRecord
+from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_task
 from app.services.object_storage import (
     build_download_headers,
     get_minio_object,
@@ -13,41 +14,82 @@ from app.services.object_storage import (
     remove_file_from_minio,
     upload_file_to_minio,
 )
-from app.services.serializers import serialize_file_record
+from app.services.serializers import serialize_document, serialize_file_record
 
 
 router = APIRouter(prefix="/upload", tags=["文件上传"])
 settings = get_settings()
 
-def _store_files(files: list[UploadFile], current_user_id: int, target_folder: str, bucket_type: str, db: DbSession) -> list[dict]:
-    records: list[dict] = []
+
+def _cleanup_uploaded_objects(object_names: list[str]) -> None:
+    for object_name in object_names:
+        remove_file_from_minio(object_name)
+
+
+def _store_files(
+    files: list[UploadFile],
+    current_user_id: int,
+    target_folder: str,
+    bucket_type: str,
+    db: DbSession,
+) -> tuple[list[FileRecord], list[str]]:
+    records: list[FileRecord] = []
     uploaded_objects: list[str] = []
-    try:
-        for upload in files:
-            _, object_name, file_size = upload_file_to_minio(upload, target_folder)
-            uploaded_objects.append(object_name)
-            record = FileRecord(
-                user_id=current_user_id,
-                bucket_name=settings.minio_bucket_name,
-                bucket_type=bucket_type,
-                folder=target_folder,
-                file_name=object_name,
-                original_name=upload.filename or object_name.rsplit("/", 1)[-1],
-                file_size=file_size,
-                mime_type=upload.content_type or "application/octet-stream",
-                file_url=f"{settings.minio_public_base_url}/{settings.minio_bucket_name}/{object_name}",
-                status=1,
-            )
-            db.add(record)
-            db.flush()
-            records.append(serialize_file_record(record))
-        db.commit()
-        return records
-    except Exception:
-        db.rollback()
-        for object_name in uploaded_objects:
-            remove_file_from_minio(object_name)
-        raise
+    for upload in files:
+        _, object_name, file_size = upload_file_to_minio(upload, target_folder)
+        uploaded_objects.append(object_name)
+        record = FileRecord(
+            user_id=current_user_id,
+            bucket_name=settings.minio_bucket_name,
+            bucket_type=bucket_type,
+            folder=target_folder,
+            file_name=object_name,
+            original_name=upload.filename or object_name.rsplit("/", 1)[-1],
+            file_size=file_size,
+            mime_type=upload.content_type or "application/octet-stream",
+            file_url=f"{settings.minio_public_base_url}/{settings.minio_bucket_name}/{object_name}",
+            status=1,
+        )
+        db.add(record)
+        db.flush()
+        records.append(record)
+    return records, uploaded_objects
+
+
+def _create_document_jobs(
+    db: DbSession,
+    *,
+    current_user_id: int,
+    file_records: list[FileRecord],
+) -> tuple[list[Document], list[DocumentTask]]:
+    documents: list[Document] = []
+    tasks: list[DocumentTask] = []
+    for file_record in file_records:
+        document = Document(
+            user_id=current_user_id,
+            file_id=file_record.id,
+            title=file_record.original_name,
+            file_name=file_record.original_name,
+            mime_type=file_record.mime_type,
+            file_size=file_record.file_size,
+            status="pending",
+            parse_mode="auto",
+        )
+        db.add(document)
+        db.flush()
+
+        task = DocumentTask(
+            document_id=document.id,
+            task_type="ingest",
+            queue_name=DOCUMENT_QUEUE_NAME,
+            status="pending",
+        )
+        db.add(task)
+        db.flush()
+
+        documents.append(document)
+        tasks.append(task)
+    return documents, tasks
 
 
 def _get_file_or_404(db: DbSession, file_id: int) -> FileRecord:
@@ -65,7 +107,18 @@ def upload_images(
 ) -> dict:
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择要上传的图片")
-    return success_response(_store_files(files, current_user.id, "images", "image", db), message="上传成功")
+
+    uploaded_objects: list[str] = []
+    try:
+        file_records, uploaded_objects = _store_files(files, current_user.id, "images", "image", db)
+        db.commit()
+        for record in file_records:
+            db.refresh(record)
+        return success_response([serialize_file_record(record) for record in file_records], message="上传成功")
+    except Exception:
+        db.rollback()
+        _cleanup_uploaded_objects(uploaded_objects)
+        raise
 
 
 @router.post("/files", summary="上传文件")
@@ -76,7 +129,31 @@ def upload_files(
 ) -> dict:
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择要上传的文件")
-    return success_response(_store_files(files, current_user.id, "files", "file", db), message="上传成功")
+
+    uploaded_objects: list[str] = []
+    try:
+        file_records, uploaded_objects = _store_files(files, current_user.id, "files", "file", db)
+        documents, tasks = _create_document_jobs(db, current_user_id=current_user.id, file_records=file_records)
+        db.commit()
+
+        for task in tasks:
+            enqueue_document_task(task.id, task.queue_name)
+
+        document_map = {document.file_id: document for document in documents}
+        response_items = []
+        for record in file_records:
+            payload = serialize_file_record(record)
+            document = document_map.get(record.id)
+            if document:
+                payload["document"] = serialize_document(document, include_file=False)
+                payload["documentId"] = document.id
+                payload["documentStatus"] = document.status
+            response_items.append(payload)
+        return success_response(response_items, message="上传成功，文档已入队，等待 Worker 处理")
+    except Exception:
+        db.rollback()
+        _cleanup_uploaded_objects(uploaded_objects)
+        raise
 
 
 @router.get("/image/{file_id}", summary="预览图片")

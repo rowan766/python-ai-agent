@@ -1,7 +1,19 @@
+import json
 from datetime import datetime
 from typing import Any
 
-from app.models import Department, DictData, DictType, FileRecord, Menu, Role, User
+from app.models import (
+    Department,
+    DictData,
+    DictType,
+    Document,
+    DocumentChunk,
+    DocumentTask,
+    FileRecord,
+    Menu,
+    Role,
+    User,
+)
 
 
 def format_datetime(value: datetime | None) -> str | None:
@@ -156,6 +168,85 @@ def serialize_file_record(file_record: FileRecord) -> dict[str, Any]:
         "createdAt": format_datetime(file_record.created_at),
         "updatedAt": format_datetime(file_record.updated_at),
     }
+
+
+def serialize_document_task(task: DocumentTask) -> dict[str, Any]:
+    return {
+        "id": task.id,
+        "documentId": task.document_id,
+        "taskType": task.task_type,
+        "queueName": task.queue_name,
+        "status": task.status,
+        "attempts": task.attempts,
+        "errorMessage": task.error_message,
+        "startedAt": format_datetime(task.started_at),
+        "finishedAt": format_datetime(task.finished_at),
+        "createdAt": format_datetime(task.created_at),
+        "updatedAt": format_datetime(task.updated_at),
+    }
+
+
+def serialize_document_chunk(chunk: DocumentChunk) -> dict[str, Any]:
+    metadata = None
+    if chunk.metadata_json:
+        try:
+            metadata = json.loads(chunk.metadata_json)
+        except json.JSONDecodeError:
+            metadata = {"raw": chunk.metadata_json}
+
+    return {
+        "id": chunk.id,
+        "documentId": chunk.document_id,
+        "taskId": chunk.task_id,
+        "chunkIndex": chunk.chunk_index,
+        "content": chunk.content,
+        "contentLength": chunk.content_length,
+        "charStart": chunk.char_start,
+        "charEnd": chunk.char_end,
+        "status": chunk.status,
+        "metadata": metadata,
+        "createdAt": format_datetime(chunk.created_at),
+        "updatedAt": format_datetime(chunk.updated_at),
+    }
+
+
+def serialize_document(
+    document: Document,
+    *,
+    include_file: bool = True,
+    include_tasks: bool = False,
+    include_chunks: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": document.id,
+        "userId": document.user_id,
+        "fileId": document.file_id,
+        "title": document.title,
+        "fileName": document.file_name,
+        "mimeType": document.mime_type,
+        "fileSize": document.file_size,
+        "status": document.status,
+        "parseMode": document.parse_mode,
+        "textLength": document.text_length,
+        "chunkCount": document.chunk_count,
+        "errorMessage": document.error_message,
+        "processedAt": format_datetime(document.processed_at),
+        "createdAt": format_datetime(document.created_at),
+        "updatedAt": format_datetime(document.updated_at),
+    }
+    if include_file:
+        payload["file"] = serialize_file_record(document.file_record) if document.file_record else None
+    if include_tasks:
+        payload["tasks"] = [
+            serialize_document_task(task)
+            for task in sorted(document.tasks, key=lambda item: item.id, reverse=True)
+        ]
+    if include_chunks:
+        payload["chunks"] = [
+            serialize_document_chunk(chunk)
+            for chunk in sorted(document.chunks, key=lambda item: item.chunk_index)
+        ]
+    return payload
 
 
 def build_tree(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

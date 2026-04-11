@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -120,6 +120,7 @@ class User(Base, TimestampMixin):
     department: Mapped[Department | None] = relationship(back_populates="users")
     user_roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     files: Mapped[list["FileRecord"]] = relationship(back_populates="user")
+    documents: Mapped[list["Document"]] = relationship(back_populates="user")
 
 
 class UserRole(Base):
@@ -201,6 +202,7 @@ class FileRecord(Base, TimestampMixin):
     status: Mapped[int] = mapped_column(default=1)
 
     user: Mapped[User] = relationship(back_populates="files")
+    document: Mapped["Document | None"] = relationship(back_populates="file_record")
 
 
 class DictType(Base, TimestampMixin):
@@ -229,3 +231,62 @@ class DictData(Base, TimestampMixin):
     status: Mapped[int] = mapped_column(default=1)
 
     dict_type: Mapped[DictType] = relationship(back_populates="items")
+
+
+class Document(Base, TimestampMixin):
+    __tablename__ = "sys_document"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
+    file_id: Mapped[int] = mapped_column(ForeignKey("sys_file.id", ondelete="CASCADE"), unique=True)
+    title: Mapped[str] = mapped_column(String(255))
+    file_name: Mapped[str] = mapped_column(String(255))
+    mime_type: Mapped[str] = mapped_column(String(100))
+    file_size: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    parse_mode: Mapped[str] = mapped_column(String(20), default="auto")
+    text_length: Mapped[int] = mapped_column(Integer, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    user: Mapped[User] = relationship(back_populates="documents")
+    file_record: Mapped[FileRecord] = relationship(back_populates="document")
+    tasks: Mapped[list["DocumentTask"]] = relationship(back_populates="document", cascade="all, delete-orphan")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
+
+
+class DocumentTask(Base, TimestampMixin):
+    __tablename__ = "sys_document_task"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("sys_document.id", ondelete="CASCADE"))
+    task_type: Mapped[str] = mapped_column(String(50), default="ingest")
+    queue_name: Mapped[str] = mapped_column(String(50), default="document-processing")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+    document: Mapped[Document] = relationship(back_populates="tasks")
+    chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="task")
+
+
+class DocumentChunk(Base, TimestampMixin):
+    __tablename__ = "sys_document_chunk"
+    __table_args__ = (UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk_index"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("sys_document.id", ondelete="CASCADE"))
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("sys_document_task.id", ondelete="SET NULL"))
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    content_length: Mapped[int] = mapped_column(Integer)
+    char_start: Mapped[int] = mapped_column(Integer, default=0)
+    char_end: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="ready")
+    metadata_json: Mapped[str | None] = mapped_column(Text)
+
+    document: Mapped[Document] = relationship(back_populates="chunks")
+    task: Mapped[DocumentTask | None] = relationship(back_populates="chunks")

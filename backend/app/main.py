@@ -8,6 +8,7 @@ from scalar_fastapi import get_scalar_api_reference
 
 from app.api.auth import router as auth_router
 from app.api.departments import router as department_router
+from app.api.documents import router as document_router
 from app.api.dicts import data_router as dict_data_router
 from app.api.dicts import type_router as dict_type_router
 from app.api.menus import router as menu_router
@@ -31,6 +32,7 @@ openapi_tags = [
     {"name": "部门管理", "description": "部门树维护接口"},
     {"name": "数据字典", "description": "字典类型与字典数据接口"},
     {"name": "文件上传", "description": "图片、文件上传与下载接口"},
+    {"name": "文档处理", "description": "文档入队、任务状态与切片结果接口"},
 ]
 
 
@@ -47,6 +49,8 @@ async def lifespan(_app: FastAPI):
     logger.info("后端已启动，Scalar 文档地址: %s", docs_url)
     print(f"后端已启动，Scalar 文档地址: {docs_url}")
     print(f"MinIO 控制台地址: {settings.minio_console_url}")
+    if settings.document_processing_mode == "worker":
+        print("文档处理模式: worker，请单独启动文档处理 Worker")
     yield
 
 
@@ -109,3 +113,4 @@ app.include_router(department_router)
 app.include_router(dict_type_router)
 app.include_router(dict_data_router)
 app.include_router(upload_router)
+app.include_router(document_router)

@@ -25,6 +25,9 @@
 - PostgreSQL 持久化配置
 - Redis 验证码存储
 - MinIO 对象存储上传
+- 文档上传后自动入队
+- 文本文档 / PDF 基础解析
+- 文档切 chunk 并写入数据库
 - 登录、验证码、个人中心
 - 用户、角色、菜单、部门、数据字典 CRUD
 - 动态菜单和按钮权限联调
@@ -125,6 +128,7 @@ docker compose up -d postgres redis minio
 - MinIO 用户名：`minioadmin`
 - MinIO 密码：`minioadmin`
 - MinIO Bucket：`admin-system`
+- 文档处理模式：`worker`
 
 ## 后端启动
 
@@ -133,7 +137,7 @@ docker compose up -d postgres redis minio
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
 uv venv .venv-fastapi
-uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous minio pydantic-settings psycopg[binary] python-multipart redis scalar-fastapi sqlalchemy "uvicorn[standard]"
+uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous minio pillow pydantic-settings pypdf psycopg[binary] python-multipart rapidocr-onnxruntime redis scalar-fastapi sqlalchemy "uvicorn[standard]"
 ```
 
 启动后端：
@@ -224,6 +228,13 @@ pnpm dev
 - 后台管理员：`admin / 123456`
 - MinIO：`minioadmin / minioadmin`
 
+### 终端 4：启动文档处理 Worker
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\backend
+.venv-fastapi\Scripts\python.exe -m app.workers.document_worker
+```
+
 ## 快速启动顺序
 
 建议按这个顺序：
@@ -255,6 +266,13 @@ pnpm dev
 - 文档：`http://127.0.0.1:3101/docs`
 - MinIO Console：`http://127.0.0.1:9001`
 
+5. 如果要处理文档
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\backend
+.venv-fastapi\Scripts\python.exe -m app.workers.document_worker
+```
+
 ## 当前上传方案
 
 当前上传功能已经切到 MinIO 对象存储。
@@ -266,6 +284,44 @@ pnpm dev
 - 前端上传、预览、下载、删除链路已打通
 
 当前验证码也已经切到 Redis，不再依赖单进程内存存储。
+
+## 当前文档处理能力
+
+第二阶段已经开始落地，当前后端已支持：
+
+- 文件上传后自动创建文档记录
+- 自动创建文档处理任务并入 Redis 队列
+- 文本文档和 PDF 的基础文本提取
+- 图片类文档 OCR
+- 扫描版 PDF OCR 回退处理
+- 自动切 chunk
+- chunk 元数据写入 PostgreSQL
+
+当前已提供的接口分组：
+
+- `文档处理`
+  - 文档列表
+  - 文档详情
+  - 文档任务列表
+  - 文档队列状态
+  - 文档切片列表
+  - 重新处理文档
+
+当前说明：
+
+- 文本类文件已支持：`txt / md / csv / json / yaml / xml / html`
+- PDF 已支持基础文本提取
+- 图片类文件已支持 OCR：`png / jpg / jpeg / bmp / gif / webp / tif / tiff`
+- 扫描版 PDF 会在“提取不到文本”时自动尝试 OCR
+
+当前文档处理已经切成独立 worker 模式，Web API 只负责入队，不再在主线程里顺手处理任务。
+
+所以如果你要让文档真正开始解析，需要单独启动 Worker：
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\backend
+.venv-fastapi\Scripts\python.exe -m app.workers.document_worker
+```
 
 ## 推荐演进路线
 

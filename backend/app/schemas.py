@@ -45,6 +45,10 @@ class AdminChangePasswordRequest(BaseModel):
     confirmPassword: str = Field(min_length=6, max_length=255)
 
 
+class DocumentReprocessRequest(BaseModel):
+    force: bool = False
+
+
 class RoleUpsertRequest(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     code: str = Field(min_length=1, max_length=50)

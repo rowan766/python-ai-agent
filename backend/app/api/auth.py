@@ -15,13 +15,13 @@ from app.services.serializers import serialize_user
 router = APIRouter(prefix="/auth", tags=["认证管理"])
 
 
-@router.get("/captcha")
+@router.get("/captcha", summary="获取验证码")
 def get_captcha() -> dict:
     captcha_id, captcha_svg = generate_captcha()
     return success_response({"captchaId": captcha_id, "captchaSvg": captcha_svg})
 
 
-@router.post("/login")
+@router.post("/login", summary="用户登录")
 def login(payload: LoginRequest, db: DbSession) -> dict:
     if not verify_captcha(payload.captchaId, payload.captchaCode):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码错误或已过期")
@@ -46,6 +46,6 @@ def login(payload: LoginRequest, db: DbSession) -> dict:
     )
 
 
-@router.post("/logout")
+@router.post("/logout", summary="退出登录")
 def logout() -> dict:
     return success_response(message="退出成功")

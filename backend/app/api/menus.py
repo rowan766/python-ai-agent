@@ -37,13 +37,13 @@ def _collect_descendant_ids(db: DbSession, menu_id: int) -> list[int]:
     return result
 
 
-@router.get("")
+@router.get("", summary="获取菜单列表")
 def get_menu_list(db: DbSession, _current_user: CurrentUser) -> dict:
     menus = db.scalars(select(Menu).order_by(Menu.sort.asc(), Menu.id.asc())).all()
     return success_response([serialize_menu(menu) for menu in menus])
 
 
-@router.post("")
+@router.post("", summary="创建菜单")
 def create_menu(payload: MenuUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _validate_menu_payload(payload)
     menu = Menu(
@@ -65,12 +65,12 @@ def create_menu(payload: MenuUpsertRequest, db: DbSession, _current_user: Curren
     return success_response(serialize_menu(menu), message="创建成功")
 
 
-@router.get("/{menu_id}")
+@router.get("/{menu_id}", summary="获取菜单详情")
 def get_menu_detail(menu_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     return success_response(serialize_menu(_get_menu_or_404(db, menu_id)))
 
 
-@router.put("/{menu_id}")
+@router.put("/{menu_id}", summary="更新菜单")
 def update_menu(menu_id: int, payload: MenuUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _validate_menu_payload(payload, current_id=menu_id)
     menu = _get_menu_or_404(db, menu_id)
@@ -90,7 +90,7 @@ def update_menu(menu_id: int, payload: MenuUpsertRequest, db: DbSession, _curren
     return success_response(serialize_menu(menu), message="更新成功")
 
 
-@router.patch("/{menu_id}")
+@router.patch("/{menu_id}", summary="更新菜单状态")
 def patch_menu_status(menu_id: int, payload: StatusPatchRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     menu = _get_menu_or_404(db, menu_id)
     menu.status = payload.status
@@ -99,7 +99,7 @@ def patch_menu_status(menu_id: int, payload: StatusPatchRequest, db: DbSession, 
     return success_response(serialize_menu(menu), message="状态更新成功")
 
 
-@router.delete("/{menu_id}")
+@router.delete("/{menu_id}", summary="删除菜单")
 def delete_menu(menu_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     descendant_ids = _collect_descendant_ids(db, menu_id)
     menus = db.scalars(select(Menu).where(Menu.id.in_(descendant_ids))).all()

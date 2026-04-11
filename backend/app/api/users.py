@@ -60,7 +60,7 @@ def _collect_department_ids(db: DbSession, department_id: int) -> list[int]:
     return result
 
 
-@router.get("")
+@router.get("", summary="获取用户列表")
 def get_user_list(
     db: DbSession,
     _current_user: CurrentUser,
@@ -93,7 +93,7 @@ def get_user_list(
     return paginated_response([serialize_user(user) for user in users], total, page, pageSize)
 
 
-@router.post("")
+@router.post("", summary="创建用户")
 def create_user(payload: UserCreateRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _assert_username_unique(db, payload.username)
     _assert_email_unique(db, payload.email)
@@ -113,13 +113,13 @@ def create_user(payload: UserCreateRequest, db: DbSession, _current_user: Curren
     return success_response(serialize_user(_get_user_or_404(db, user.id)), message="创建成功")
 
 
-@router.get("/profile")
+@router.get("/profile", summary="获取个人信息")
 def get_current_profile(db: DbSession, current_user: CurrentUser) -> dict:
     user = _get_user_or_404(db, current_user.id)
     return success_response(serialize_user(user))
 
 
-@router.put("/profile")
+@router.put("/profile", summary="更新个人信息")
 def update_current_profile(payload: ProfileUpdateRequest, db: DbSession, current_user: CurrentUser) -> dict:
     _assert_email_unique(db, payload.email, exclude_user_id=current_user.id)
 
@@ -132,7 +132,7 @@ def update_current_profile(payload: ProfileUpdateRequest, db: DbSession, current
     return success_response(serialize_user(_get_user_or_404(db, current_user.id)), message="保存成功")
 
 
-@router.post("/change-password")
+@router.post("/change-password", summary="修改个人密码")
 def change_current_password(payload: ChangePasswordRequest, db: DbSession, current_user: CurrentUser) -> dict:
     if payload.newPassword != payload.confirmPassword:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="两次输入的新密码不一致")
@@ -144,7 +144,7 @@ def change_current_password(payload: ChangePasswordRequest, db: DbSession, curre
     return success_response(message="密码修改成功")
 
 
-@router.get("/current/menus")
+@router.get("/current/menus", summary="获取当前用户菜单")
 def get_current_user_menus(db: DbSession, current_user: CurrentUser) -> dict:
     role_ids = [relation.role_id for relation in current_user.user_roles]
     if not role_ids:
@@ -159,12 +159,12 @@ def get_current_user_menus(db: DbSession, current_user: CurrentUser) -> dict:
     return success_response(tree)
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", summary="获取用户详情")
 def get_user_detail(user_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     return success_response(serialize_user(_get_user_or_404(db, user_id)))
 
 
-@router.put("/{user_id}")
+@router.put("/{user_id}", summary="更新用户")
 def update_user(user_id: int, payload: UserUpdateRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     user = _get_user_or_404(db, user_id)
     _assert_username_unique(db, payload.username, exclude_user_id=user_id)
@@ -182,7 +182,7 @@ def update_user(user_id: int, payload: UserUpdateRequest, db: DbSession, _curren
     return success_response(serialize_user(_get_user_or_404(db, user_id)), message="更新成功")
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", summary="删除用户")
 def delete_user(user_id: int, db: DbSession, current_user: CurrentUser) -> dict:
     if user_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能删除当前登录用户")
@@ -194,7 +194,7 @@ def delete_user(user_id: int, db: DbSession, current_user: CurrentUser) -> dict:
     return success_response(message="删除成功")
 
 
-@router.post("/{user_id}/roles")
+@router.post("/{user_id}/roles", summary="分配用户角色")
 def assign_user_roles(user_id: int, payload: AssignRolesRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     user = _get_user_or_404(db, user_id)
     role_ids = sorted(set(payload.roleIds))

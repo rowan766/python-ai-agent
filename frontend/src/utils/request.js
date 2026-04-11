@@ -2,6 +2,25 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { API_BASE_URL } from './api-base-url'
 
+const clearAuthState = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user-store')
+}
+
+const redirectToLogin = () => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (window.location.pathname === '/login') {
+    return
+  }
+
+  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  const loginUrl = `/login?redirect=${encodeURIComponent(redirect)}`
+  window.location.replace(loginUrl)
+}
+
 // 创建 axios 实例
 const request = axios.create({
   baseURL: API_BASE_URL,
@@ -43,7 +62,16 @@ request.interceptors.response.use(
   },
   error => {
     // 统一错误处理
-    const message = error.response?.data?.message || error.message || '请求失败'
+    const status = error.response?.status
+    const message = error.response?.data?.message || error.response?.data?.detail || error.message || '请求失败'
+
+    if (status === 401) {
+      clearAuthState()
+      ElMessage.error(message || '登录状态已失效，请重新登录')
+      redirectToLogin()
+      return Promise.reject(error)
+    }
+
     ElMessage.error(message)
     console.error('Response error:', error)
     return Promise.reject(error)

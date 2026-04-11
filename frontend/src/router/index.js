@@ -25,6 +25,12 @@ const routes = [
     meta: { requiresAuth: true },
     children: [
       {
+        path: '/dashboard',
+        name: 'Dashboard',
+        component: () => import('../views/Dashboard.vue'),
+        meta: { title: '首页' }
+      },
+      {
         path: NO_MENU_PATH,
         name: 'NoMenu',
         component: () => import('../views/NoMenu.vue'),

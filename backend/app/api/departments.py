@@ -28,13 +28,13 @@ def _assert_department_code_unique(db: DbSession, code: str | None, exclude_id: 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="部门编码已存在")
 
 
-@router.get("")
+@router.get("", summary="获取部门列表")
 def get_department_list(db: DbSession, _current_user: CurrentUser) -> dict:
     departments = db.scalars(select(Department).order_by(Department.sort.asc(), Department.id.asc())).all()
     return success_response(build_tree([serialize_department(item) for item in departments]))
 
 
-@router.post("")
+@router.post("", summary="创建部门")
 def create_department(payload: DepartmentUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _assert_department_code_unique(db, payload.code)
     department = Department(
@@ -54,12 +54,12 @@ def create_department(payload: DepartmentUpsertRequest, db: DbSession, _current_
     return success_response(serialize_department(department), message="创建成功")
 
 
-@router.get("/{department_id}")
+@router.get("/{department_id}", summary="获取部门详情")
 def get_department_detail(department_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     return success_response(serialize_department(_get_department_or_404(db, department_id)))
 
 
-@router.put("/{department_id}")
+@router.put("/{department_id}", summary="更新部门")
 def update_department(department_id: int, payload: DepartmentUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     department = _get_department_or_404(db, department_id)
     _assert_department_code_unique(db, payload.code, exclude_id=department_id)
@@ -79,7 +79,7 @@ def update_department(department_id: int, payload: DepartmentUpsertRequest, db: 
     return success_response(serialize_department(department), message="更新成功")
 
 
-@router.delete("/{department_id}")
+@router.delete("/{department_id}", summary="删除部门")
 def delete_department(department_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     department = _get_department_or_404(db, department_id)
     has_children = db.scalar(select(Department.id).where(Department.parent_id == department_id).limit(1))

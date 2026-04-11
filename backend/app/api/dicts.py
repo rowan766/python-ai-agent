@@ -26,7 +26,7 @@ def _get_dict_data_or_404(db: DbSession, dict_data_id: int) -> DictData:
     return dict_data
 
 
-@type_router.get("")
+@type_router.get("", summary="获取字典类型列表")
 def get_dict_type_list(
     db: DbSession,
     _current_user: CurrentUser,
@@ -43,7 +43,7 @@ def get_dict_type_list(
     return paginated_response([serialize_dict_type(item) for item in items], total, page, pageSize)
 
 
-@type_router.post("")
+@type_router.post("", summary="创建字典类型")
 def create_dict_type(payload: DictTypeUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     if db.scalar(select(DictType).where(DictType.code == payload.code)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="字典编码已存在")
@@ -60,12 +60,12 @@ def create_dict_type(payload: DictTypeUpsertRequest, db: DbSession, _current_use
     return success_response(serialize_dict_type(dict_type), message="创建成功")
 
 
-@type_router.get("/{dict_type_id}")
+@type_router.get("/{dict_type_id}", summary="获取字典类型详情")
 def get_dict_type_detail(dict_type_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     return success_response(serialize_dict_type(_get_dict_type_or_404(db, dict_type_id)))
 
 
-@type_router.put("/{dict_type_id}")
+@type_router.put("/{dict_type_id}", summary="更新字典类型")
 def update_dict_type(dict_type_id: int, payload: DictTypeUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     dict_type = _get_dict_type_or_404(db, dict_type_id)
     conflict = db.scalar(select(DictType).where(DictType.code == payload.code, DictType.id != dict_type_id))
@@ -81,7 +81,7 @@ def update_dict_type(dict_type_id: int, payload: DictTypeUpsertRequest, db: DbSe
     return success_response(serialize_dict_type(dict_type), message="更新成功")
 
 
-@type_router.patch("/{dict_type_id}")
+@type_router.patch("/{dict_type_id}", summary="更新字典类型状态")
 def update_dict_type_status(dict_type_id: int, payload: StatusPatchRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     dict_type = _get_dict_type_or_404(db, dict_type_id)
     dict_type.status = payload.status
@@ -90,7 +90,7 @@ def update_dict_type_status(dict_type_id: int, payload: StatusPatchRequest, db: 
     return success_response(serialize_dict_type(dict_type), message="状态更新成功")
 
 
-@type_router.delete("/{dict_type_id}")
+@type_router.delete("/{dict_type_id}", summary="删除字典类型")
 def delete_dict_type(dict_type_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     dict_type = _get_dict_type_or_404(db, dict_type_id)
     db.delete(dict_type)
@@ -98,7 +98,7 @@ def delete_dict_type(dict_type_id: int, db: DbSession, _current_user: CurrentUse
     return success_response(message="删除成功")
 
 
-@data_router.get("/type/{code}")
+@data_router.get("/type/{code}", summary="按编码获取字典数据")
 def get_dict_by_code(code: str, db: DbSession, _current_user: CurrentUser) -> dict:
     dict_type = db.scalar(select(DictType).where(DictType.code == code))
     if not dict_type:
@@ -111,7 +111,7 @@ def get_dict_by_code(code: str, db: DbSession, _current_user: CurrentUser) -> di
     return success_response([serialize_dict_data(item) for item in items])
 
 
-@data_router.get("")
+@data_router.get("", summary="获取字典数据列表")
 def get_dict_data_list(
     db: DbSession,
     _current_user: CurrentUser,
@@ -130,7 +130,7 @@ def get_dict_data_list(
     return paginated_response([serialize_dict_data(item) for item in items], total, page, pageSize)
 
 
-@data_router.post("")
+@data_router.post("", summary="创建字典数据")
 def create_dict_data(payload: DictDataUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _get_dict_type_or_404(db, payload.dictTypeId)
     item = DictData(
@@ -148,12 +148,12 @@ def create_dict_data(payload: DictDataUpsertRequest, db: DbSession, _current_use
     return success_response(serialize_dict_data(item), message="创建成功")
 
 
-@data_router.get("/{dict_data_id}")
+@data_router.get("/{dict_data_id}", summary="获取字典数据详情")
 def get_dict_data_detail(dict_data_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     return success_response(serialize_dict_data(_get_dict_data_or_404(db, dict_data_id)))
 
 
-@data_router.put("/{dict_data_id}")
+@data_router.put("/{dict_data_id}", summary="更新字典数据")
 def update_dict_data(dict_data_id: int, payload: DictDataUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _get_dict_type_or_404(db, payload.dictTypeId)
     item = _get_dict_data_or_404(db, dict_data_id)
@@ -169,7 +169,7 @@ def update_dict_data(dict_data_id: int, payload: DictDataUpsertRequest, db: DbSe
     return success_response(serialize_dict_data(item), message="更新成功")
 
 
-@data_router.patch("/{dict_data_id}")
+@data_router.patch("/{dict_data_id}", summary="更新字典数据状态")
 def update_dict_data_status(dict_data_id: int, payload: StatusPatchRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     item = _get_dict_data_or_404(db, dict_data_id)
     item.status = payload.status
@@ -178,7 +178,7 @@ def update_dict_data_status(dict_data_id: int, payload: StatusPatchRequest, db: 
     return success_response(serialize_dict_data(item), message="状态更新成功")
 
 
-@data_router.delete("/{dict_data_id}")
+@data_router.delete("/{dict_data_id}", summary="删除字典数据")
 def delete_dict_data(dict_data_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     item = _get_dict_data_or_404(db, dict_data_id)
     db.delete(item)

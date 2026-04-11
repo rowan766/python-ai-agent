@@ -40,7 +40,9 @@ async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_database(db)
-    logger.info("后端已启动，Scalar 文档地址: http://127.0.0.1:%s/docs", settings.app_port)
+    docs_url = f"http://127.0.0.1:{settings.app_port}/docs"
+    logger.info("后端已启动，Scalar 文档地址: %s", docs_url)
+    print(f"后端已启动，Scalar 文档地址: {docs_url}")
     yield
 
 
@@ -77,12 +79,12 @@ async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSON
     )
 
 
-@app.get("/")
+@app.get("/", summary="系统根路径")
 def root() -> dict:
     return {"name": settings.app_name, "status": "ok"}
 
 
-@app.get("/health")
+@app.get("/health", summary="健康检查")
 def health() -> dict:
     return {"status": "ok"}
 

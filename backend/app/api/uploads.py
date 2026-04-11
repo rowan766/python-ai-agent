@@ -64,7 +64,7 @@ def _build_physical_path(file_record: FileRecord) -> Path:
     return settings.upload_root / file_record.file_name
 
 
-@router.post("/images")
+@router.post("/images", summary="上传图片")
 def upload_images(
     db: DbSession,
     current_user: CurrentUser,
@@ -75,7 +75,7 @@ def upload_images(
     return success_response(_store_files(files, current_user.id, "images", "image", "image", db), message="上传成功")
 
 
-@router.post("/files")
+@router.post("/files", summary="上传文件")
 def upload_files(
     db: DbSession,
     current_user: CurrentUser,
@@ -86,7 +86,7 @@ def upload_files(
     return success_response(_store_files(files, current_user.id, "files", "file", "file", db), message="上传成功")
 
 
-@router.get("/image/{file_id}")
+@router.get("/image/{file_id}", summary="预览图片")
 def preview_image(file_id: int, db: DbSession, download: bool = Query(default=False)) -> FileResponse:
     file_record = _get_file_or_404(db, file_id)
     file_path = _build_physical_path(file_record)
@@ -100,7 +100,7 @@ def preview_image(file_id: int, db: DbSession, download: bool = Query(default=Fa
     )
 
 
-@router.get("/file/{file_id}/download")
+@router.get("/file/{file_id}/download", summary="下载文件")
 def download_file(file_id: int, db: DbSession) -> FileResponse:
     file_record = _get_file_or_404(db, file_id)
     file_path = _build_physical_path(file_record)
@@ -114,7 +114,7 @@ def download_file(file_id: int, db: DbSession) -> FileResponse:
     )
 
 
-@router.delete("/file/{file_id}")
+@router.delete("/file/{file_id}", summary="删除上传文件")
 def delete_uploaded_file(file_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     file_record = _get_file_or_404(db, file_id)
     file_path = _build_physical_path(file_record)

@@ -39,7 +39,7 @@ def _assert_role_unique(db: DbSession, *, name: str, code: str, exclude_role_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="角色编码已存在")
 
 
-@router.get("")
+@router.get("", summary="获取角色列表")
 def get_role_list(
     db: DbSession,
     _current_user: CurrentUser,
@@ -68,7 +68,7 @@ def get_role_list(
     return paginated_response([serialize_role(role) for role in roles], total, page, pageSize)
 
 
-@router.post("")
+@router.post("", summary="创建角色")
 def create_role(payload: RoleUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _assert_role_unique(db, name=payload.name, code=payload.code)
     role = Role(
@@ -85,12 +85,12 @@ def create_role(payload: RoleUpsertRequest, db: DbSession, _current_user: Curren
     return success_response(serialize_role(role), message="创建成功")
 
 
-@router.get("/{role_id}")
+@router.get("/{role_id}", summary="获取角色详情")
 def get_role_detail(role_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     return success_response(serialize_role(_get_role_or_404(db, role_id), include_relations=True))
 
 
-@router.patch("/{role_id}")
+@router.patch("/{role_id}", summary="更新角色")
 def update_role(role_id: int, payload: RoleUpsertRequest | StatusPatchRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     role = _get_role_or_404(db, role_id)
     if isinstance(payload, RoleUpsertRequest):
@@ -109,7 +109,7 @@ def update_role(role_id: int, payload: RoleUpsertRequest | StatusPatchRequest, d
     return success_response(serialize_role(role), message="更新成功")
 
 
-@router.delete("/{role_id}")
+@router.delete("/{role_id}", summary="删除角色")
 def delete_role(role_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     role = _get_role_or_404(db, role_id)
     if role.code == "admin":
@@ -121,7 +121,7 @@ def delete_role(role_id: int, db: DbSession, _current_user: CurrentUser) -> dict
     return success_response(message="删除成功")
 
 
-@router.post("/{role_id}/menus")
+@router.post("/{role_id}/menus", summary="设置角色菜单权限")
 def set_role_menus(role_id: int, payload: RoleMenusRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     role = _get_role_or_404(db, role_id)
     menu_ids = sorted(set(payload.menuIds))
@@ -132,7 +132,7 @@ def set_role_menus(role_id: int, payload: RoleMenusRequest, db: DbSession, _curr
     return success_response(serialize_role(_get_role_or_404(db, role.id), include_relations=True), message="权限配置成功")
 
 
-@router.post("/{role_id}/data-scope")
+@router.post("/{role_id}/data-scope", summary="设置角色数据权限")
 def set_role_data_scope(role_id: int, payload: RoleDataScopeRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     role = _get_role_or_404(db, role_id)
     if payload.departmentIds:

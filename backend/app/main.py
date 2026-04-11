@@ -16,6 +16,8 @@ from app.api.uploads import router as upload_router
 from app.api.users import router as user_router
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
+from app.core.redis_client import get_redis_client
+from app.services.object_storage import ensure_minio_bucket
 from app.services.seed import seed_database
 
 
@@ -36,13 +38,15 @@ openapi_tags = [
 async def lifespan(_app: FastAPI):
     if settings.database_file_path:
         settings.database_file_path.parent.mkdir(parents=True, exist_ok=True)
-    settings.upload_root.mkdir(parents=True, exist_ok=True)
+    get_redis_client().ping()
+    ensure_minio_bucket()
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_database(db)
     docs_url = f"http://127.0.0.1:{settings.app_port}/docs"
     logger.info("后端已启动，Scalar 文档地址: %s", docs_url)
     print(f"后端已启动，Scalar 文档地址: {docs_url}")
+    print(f"MinIO 控制台地址: {settings.minio_console_url}")
     yield
 
 

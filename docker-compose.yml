@@ -21,6 +21,21 @@ services:
     command: redis-server --appendonly yes  # 开启持久化，重启不丢数据
     restart: unless-stopped
 
+  # MinIO - 企业级对象存储，用于上传文件、附件与后续预处理产物
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
   # PostgreSQL - 存储用户信息、登录凭证、知识库元数据
   postgres:
     image: postgres:16-alpine
@@ -44,4 +59,5 @@ services:
 volumes:
   qdrant_data:
   redis_data:
+  minio_data:
   admin_system_postgres_data:

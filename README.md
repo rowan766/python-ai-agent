@@ -23,18 +23,14 @@
 
 - FastAPI 后端基础工程
 - PostgreSQL 持久化配置
+- Redis 验证码存储
+- MinIO 对象存储上传
 - 登录、验证码、个人中心
 - 用户、角色、菜单、部门、数据字典 CRUD
 - 动态菜单和按钮权限联调
 - 文件上传、下载、图片预览
 - Scalar API 文档
 - 前后端本地联调可运行
-
-当前还没有切到 MinIO，上传文件暂时存放在本地目录：
-
-- `backend/app/storage/uploads/`
-
-这是为了先把前后端和权限主链路跑通。后续如果按企业级 RAG 路线推进，文件存储建议切换到 MinIO。
 
 ## 技术栈
 
@@ -58,6 +54,7 @@
 
 - PostgreSQL
 - Redis
+- MinIO
 - Qdrant
 
 ## 当前目录
@@ -84,7 +81,9 @@ python-ai-agent/
 - `postgres`
   当前后台管理系统默认使用
 - `redis`
-  已准备好，后续用于验证码、缓存、任务状态、异步任务队列
+  当前已用于验证码存储，后续继续承接缓存、任务状态、异步任务队列
+- `minio`
+  当前已用于图片、文件上传和对象存储管理
 - `qdrant`
   已准备好，后续用于 RAG 向量检索
 
@@ -95,10 +94,10 @@ cd D:\study_python_20260404\python-ai-agent
 docker compose up -d
 ```
 
-如果你当前只想先跑后台管理系统，至少启动 PostgreSQL：
+如果你当前只想先跑后台管理系统，建议至少启动这三个：
 
 ```powershell
-docker compose up -d postgres
+docker compose up -d postgres redis minio
 ```
 
 ## PostgreSQL 配置
@@ -116,6 +115,17 @@ docker compose up -d postgres
 - [backend/.env](D:/study_python_20260404/python-ai-agent/backend/.env)
 - [backend/.env.example](D:/study_python_20260404/python-ai-agent/backend/.env.example)
 
+## Redis 与 MinIO 配置
+
+当前后端默认连接：
+
+- Redis：`redis://127.0.0.1:6379/0`
+- MinIO API：`http://127.0.0.1:9000`
+- MinIO Console：`http://127.0.0.1:9001`
+- MinIO 用户名：`minioadmin`
+- MinIO 密码：`minioadmin`
+- MinIO Bucket：`admin-system`
+
 ## 后端启动
 
 第一次安装依赖：
@@ -123,7 +133,7 @@ docker compose up -d postgres
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
 uv venv .venv-fastapi
-uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous pydantic-settings psycopg[binary] python-multipart scalar-fastapi sqlalchemy "uvicorn[standard]"
+uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous minio pydantic-settings psycopg[binary] python-multipart redis scalar-fastapi sqlalchemy "uvicorn[standard]"
 ```
 
 启动后端：
@@ -137,13 +147,21 @@ cd D:\study_python_20260404\python-ai-agent\backend
 
 - 自动建表
 - 自动初始化基础数据
+- 自动检查 Redis 连接
+- 自动创建 MinIO Bucket
 - 默认管理员账号：`admin / 123456`
 - 控制台会打印 Scalar 文档地址
+- 控制台会打印 MinIO 控制台地址
 
 文档地址：
 
 - Scalar 文档：`http://127.0.0.1:3101/docs`
 - OpenAPI JSON：`http://127.0.0.1:3101/openapi.json`
+
+后端控制台启动后还会打印：
+
+- Scalar 文档地址
+- MinIO 控制台地址：`http://127.0.0.1:9001`
 
 ## 前端启动
 
@@ -151,14 +169,14 @@ cd D:\study_python_20260404\python-ai-agent\backend
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\frontend
-npm install
+pnpm install
 ```
 
 启动前端：
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\frontend
-npm run dev
+pnpm dev
 ```
 
 默认访问地址：
@@ -170,15 +188,51 @@ npm run dev
 
 - `http://localhost:3101`
 
+## 一次看懂怎么启动
+
+推荐开 3 个终端，按这个顺序启动。
+
+### 终端 1：启动基础服务
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent
+docker compose up -d postgres redis minio
+```
+
+### 终端 2：启动后端
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\backend
+.venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+```
+
+### 终端 3：启动前端
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\frontend
+pnpm dev
+```
+
+启动完成后访问：
+
+- 前端：`http://127.0.0.1:5173`
+- 后端文档：`http://127.0.0.1:3101/docs`
+- MinIO Console：`http://127.0.0.1:9001`
+
+默认账号：
+
+- 后台管理员：`admin / 123456`
+- MinIO：`minioadmin / minioadmin`
+
 ## 快速启动顺序
 
 建议按这个顺序：
 
-1. 启动数据库
+1. 启动基础服务
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent
-docker compose up -d postgres
+docker compose up -d postgres redis minio
 ```
 
 2. 启动后端
@@ -192,28 +246,26 @@ cd D:\study_python_20260404\python-ai-agent\backend
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\frontend
-npm run dev
+pnpm dev
 ```
 
 4. 浏览器访问
 
 - 前端：`http://127.0.0.1:5173`
 - 文档：`http://127.0.0.1:3101/docs`
+- MinIO Console：`http://127.0.0.1:9001`
 
 ## 当前上传方案
 
-当前上传功能已经可用，但实现方式是本地文件存储，不是 MinIO。
+当前上传功能已经切到 MinIO 对象存储。
 
 当前行为：
 
-- 文件内容保存在 `backend/app/storage/uploads/`
+- 文件内容保存在 MinIO Bucket `admin-system`
 - 文件记录保存在 PostgreSQL `sys_file`
 - 前端上传、预览、下载、删除链路已打通
 
-这样做的原因是：
-
-- 先确保权限、上传、元数据、页面联调闭环
-- 降低最初接入复杂度
+当前验证码也已经切到 Redis，不再依赖单进程内存存储。
 
 ## 推荐演进路线
 

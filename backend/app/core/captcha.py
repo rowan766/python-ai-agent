@@ -1,20 +1,19 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 import random
 import uuid
 
 from app.core.config import get_settings
+from app.core.redis_client import get_redis_client
 
 
 settings = get_settings()
-_captcha_store: dict[str, tuple[str, datetime]] = {}
+redis_client = get_redis_client()
 _captcha_chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+_captcha_key_prefix = f"{settings.redis_key_prefix}:captcha"
 
 
-def _purge_expired() -> None:
-    now = datetime.utcnow()
-    expired_keys = [key for key, (_, expires_at) in _captcha_store.items() if expires_at <= now]
-    for key in expired_keys:
-        _captcha_store.pop(key, None)
+def _build_captcha_key(captcha_id: str) -> str:
+    return f"{_captcha_key_prefix}:{captcha_id}"
 
 
 def _build_svg(code: str) -> str:
@@ -49,20 +48,19 @@ def _build_svg(code: str) -> str:
 
 
 def generate_captcha() -> tuple[str, str]:
-    _purge_expired()
     captcha_id = uuid.uuid4().hex
     code = "".join(random.choice(_captcha_chars) for _ in range(4))
-    expires_at = datetime.utcnow() + timedelta(seconds=settings.captcha_ttl_seconds)
-    _captcha_store[captcha_id] = (code, expires_at)
+    redis_client.setex(
+        _build_captcha_key(captcha_id),
+        timedelta(seconds=settings.captcha_ttl_seconds),
+        code,
+    )
     return captcha_id, _build_svg(code)
 
 
 def verify_captcha(captcha_id: str, captcha_code: str) -> bool:
-    _purge_expired()
-    stored = _captcha_store.pop(captcha_id, None)
-    if not stored:
-        return False
-    code, expires_at = stored
-    if expires_at <= datetime.utcnow():
+    key = _build_captcha_key(captcha_id)
+    code = redis_client.getdel(key)
+    if not code:
         return False
     return code.upper() == (captcha_code or "").strip().upper()

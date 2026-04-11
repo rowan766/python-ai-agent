@@ -2,6 +2,10 @@
 
 基于 `Vue 3 + Vite + Element Plus + Pinia + Vue Router` 的后台管理系统前端。
 
+如果你是第一次启动整个项目，优先看仓库根目录 README：
+
+- [项目 README](../README.md)
+
 这个项目支持：
 
 - 登录鉴权
@@ -58,13 +62,13 @@ src/
 
 ## 环境要求
 
-- Node.js 18+
+- Node.js 20+
 - pnpm 8+
 - 可访问的后端服务，默认代理到 `http://localhost:3101`
 
 ## 安装依赖
 
-```bash
+```powershell
 pnpm install
 ```
 
@@ -72,7 +76,7 @@ pnpm install
 
 启动开发环境：
 
-```bash
+```powershell
 pnpm dev
 ```
 
@@ -97,15 +101,51 @@ server: {
 
 ## 构建
 
-```bash
+```powershell
 pnpm build
 ```
 
 如需本地预览构建结果：
 
-```bash
+```powershell
 pnpm preview
 ```
+
+## 前后端联调启动
+
+推荐按下面顺序启动整个项目：
+
+1. 启动 Docker 基础服务
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent
+docker compose up -d postgres redis minio
+```
+
+2. 启动后端
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\backend
+.venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+```
+
+3. 启动前端
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\frontend
+pnpm dev
+```
+
+启动完成后可访问：
+
+- 前端：`http://127.0.0.1:5173`
+- 后端文档：`http://127.0.0.1:3101/docs`
+- MinIO Console：`http://127.0.0.1:9001`
+
+默认账号：
+
+- 后台管理员：`admin / 123456`
+- MinIO：`minioadmin / minioadmin`
 
 ## 和后端联调前建议确认
 

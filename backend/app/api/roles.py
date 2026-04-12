@@ -1,11 +1,22 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import paginated_response, success_response
 from app.models import Department, Role, RoleDepartment, RoleMenu, UserRole
-from app.schemas import RoleDataScopeRequest, RoleMenusRequest, RoleUpsertRequest, StatusPatchRequest
+from app.schemas import (
+    ApiResponse,
+    PageData,
+    RoleDataScopeRequest,
+    RoleDetail,
+    RoleMenusRequest,
+    RoleSummary,
+    RoleUpsertRequest,
+    StatusPatchRequest,
+)
 from app.services.serializers import serialize_role
 
 
@@ -39,15 +50,19 @@ def _assert_role_unique(db: DbSession, *, name: str, code: str, exclude_role_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="角色编码已存在")
 
 
-@router.get("", summary="获取角色列表")
+@router.get(
+    "",
+    summary="获取角色列表",
+    response_model=ApiResponse[PageData[RoleSummary]],
+)
 def get_role_list(
     db: DbSession,
     _current_user: CurrentUser,
-    page: int = Query(default=1, ge=1),
-    pageSize: int = Query(default=10, ge=1, le=1000),
-    name: str | None = None,
-    code: str | None = None,
-    status: int | None = None,
+    page: int = Query(default=1, ge=1, title="页码", description="分页页码，从 1 开始"),
+    pageSize: int = Query(default=10, ge=1, le=1000, title="每页条数", description="每页返回的角色数量"),
+    name: str | None = Query(default=None, title="角色名称", description="按角色名称模糊搜索"),
+    code: str | None = Query(default=None, title="角色编码", description="按角色编码模糊搜索"),
+    status: int | None = Query(default=None, title="状态", description="按角色状态筛选"),
 ) -> dict:
     filters = []
     if name:
@@ -68,7 +83,11 @@ def get_role_list(
     return paginated_response([serialize_role(role) for role in roles], total, page, pageSize)
 
 
-@router.post("", summary="创建角色")
+@router.post(
+    "",
+    summary="创建角色",
+    response_model=ApiResponse[RoleSummary],
+)
 def create_role(payload: RoleUpsertRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _assert_role_unique(db, name=payload.name, code=payload.code)
     role = Role(
@@ -85,13 +104,30 @@ def create_role(payload: RoleUpsertRequest, db: DbSession, _current_user: Curren
     return success_response(serialize_role(role), message="创建成功")
 
 
-@router.get("/{role_id}", summary="获取角色详情")
-def get_role_detail(role_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.get(
+    "/{role_id}",
+    summary="获取角色详情",
+    response_model=ApiResponse[RoleDetail],
+)
+def get_role_detail(
+    role_id: Annotated[int, Path(title="角色 ID", description="要查询的角色主键 ID")],
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     return success_response(serialize_role(_get_role_or_404(db, role_id), include_relations=True))
 
 
-@router.patch("/{role_id}", summary="更新角色")
-def update_role(role_id: int, payload: RoleUpsertRequest | StatusPatchRequest, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.patch(
+    "/{role_id}",
+    summary="更新角色",
+    response_model=ApiResponse[RoleSummary],
+)
+def update_role(
+    role_id: Annotated[int, Path(title="角色 ID", description="要更新的角色主键 ID")],
+    payload: RoleUpsertRequest | StatusPatchRequest,
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     role = _get_role_or_404(db, role_id)
     if isinstance(payload, RoleUpsertRequest):
         _assert_role_unique(db, name=payload.name, code=payload.code, exclude_role_id=role_id)
@@ -109,8 +145,16 @@ def update_role(role_id: int, payload: RoleUpsertRequest | StatusPatchRequest, d
     return success_response(serialize_role(role), message="更新成功")
 
 
-@router.delete("/{role_id}", summary="删除角色")
-def delete_role(role_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.delete(
+    "/{role_id}",
+    summary="删除角色",
+    response_model=ApiResponse[None],
+)
+def delete_role(
+    role_id: Annotated[int, Path(title="角色 ID", description="要删除的角色主键 ID")],
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     role = _get_role_or_404(db, role_id)
     if role.code == "admin":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="系统管理员角色不能删除")
@@ -121,8 +165,17 @@ def delete_role(role_id: int, db: DbSession, _current_user: CurrentUser) -> dict
     return success_response(message="删除成功")
 
 
-@router.post("/{role_id}/menus", summary="设置角色菜单权限")
-def set_role_menus(role_id: int, payload: RoleMenusRequest, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.post(
+    "/{role_id}/menus",
+    summary="设置角色菜单权限",
+    response_model=ApiResponse[RoleDetail],
+)
+def set_role_menus(
+    role_id: Annotated[int, Path(title="角色 ID", description="要配置菜单权限的角色主键 ID")],
+    payload: RoleMenusRequest,
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     role = _get_role_or_404(db, role_id)
     menu_ids = sorted(set(payload.menuIds))
     db.query(RoleMenu).filter(RoleMenu.role_id == role.id).delete()
@@ -132,8 +185,17 @@ def set_role_menus(role_id: int, payload: RoleMenusRequest, db: DbSession, _curr
     return success_response(serialize_role(_get_role_or_404(db, role.id), include_relations=True), message="权限配置成功")
 
 
-@router.post("/{role_id}/data-scope", summary="设置角色数据权限")
-def set_role_data_scope(role_id: int, payload: RoleDataScopeRequest, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.post(
+    "/{role_id}/data-scope",
+    summary="设置角色数据权限",
+    response_model=ApiResponse[RoleDetail],
+)
+def set_role_data_scope(
+    role_id: Annotated[int, Path(title="角色 ID", description="要配置数据权限的角色主键 ID")],
+    payload: RoleDataScopeRequest,
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     role = _get_role_or_404(db, role_id)
     if payload.departmentIds:
         departments = db.scalars(select(Department.id).where(Department.id.in_(payload.departmentIds))).all()

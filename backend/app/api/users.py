@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -7,10 +9,14 @@ from app.core.http import paginated_response, success_response
 from app.core.security import hash_password, verify_password
 from app.models import Department, Menu, Role, RoleMenu, User, UserRole
 from app.schemas import (
+    ApiResponse,
     AdminChangePasswordRequest,
     AssignRolesRequest,
     ChangePasswordRequest,
+    MenuItem,
+    PageData,
     ProfileUpdateRequest,
+    UserItem,
     UserCreateRequest,
     UserUpdateRequest,
 )
@@ -61,15 +67,19 @@ def _collect_department_ids(db: DbSession, department_id: int) -> list[int]:
     return result
 
 
-@router.get("", summary="获取用户列表")
+@router.get(
+    "",
+    summary="获取用户列表",
+    response_model=ApiResponse[PageData[UserItem]],
+)
 def get_user_list(
     db: DbSession,
     _current_user: CurrentUser,
-    page: int = Query(default=1, ge=1),
-    pageSize: int = Query(default=10, ge=1, le=1000),
-    username: str | None = None,
-    email: str | None = None,
-    departmentId: int | None = None,
+    page: int = Query(default=1, ge=1, title="页码", description="分页页码，从 1 开始"),
+    pageSize: int = Query(default=10, ge=1, le=1000, title="每页条数", description="每页返回的用户数量"),
+    username: str | None = Query(default=None, title="用户名", description="按用户名模糊搜索"),
+    email: str | None = Query(default=None, title="邮箱", description="按邮箱模糊搜索"),
+    departmentId: int | None = Query(default=None, title="部门 ID", description="按部门及其子部门筛选"),
 ) -> dict:
     filters = []
     if username:
@@ -94,7 +104,11 @@ def get_user_list(
     return paginated_response([serialize_user(user) for user in users], total, page, pageSize)
 
 
-@router.post("", summary="创建用户")
+@router.post(
+    "",
+    summary="创建用户",
+    response_model=ApiResponse[UserItem],
+)
 def create_user(payload: UserCreateRequest, db: DbSession, _current_user: CurrentUser) -> dict:
     _assert_username_unique(db, payload.username)
     _assert_email_unique(db, payload.email)
@@ -114,13 +128,21 @@ def create_user(payload: UserCreateRequest, db: DbSession, _current_user: Curren
     return success_response(serialize_user(_get_user_or_404(db, user.id)), message="创建成功")
 
 
-@router.get("/profile", summary="获取个人信息")
+@router.get(
+    "/profile",
+    summary="获取个人信息",
+    response_model=ApiResponse[UserItem],
+)
 def get_current_profile(db: DbSession, current_user: CurrentUser) -> dict:
     user = _get_user_or_404(db, current_user.id)
     return success_response(serialize_user(user))
 
 
-@router.put("/profile", summary="更新个人信息")
+@router.put(
+    "/profile",
+    summary="更新个人信息",
+    response_model=ApiResponse[UserItem],
+)
 def update_current_profile(payload: ProfileUpdateRequest, db: DbSession, current_user: CurrentUser) -> dict:
     _assert_email_unique(db, payload.email, exclude_user_id=current_user.id)
 
@@ -133,7 +155,11 @@ def update_current_profile(payload: ProfileUpdateRequest, db: DbSession, current
     return success_response(serialize_user(_get_user_or_404(db, current_user.id)), message="保存成功")
 
 
-@router.post("/change-password", summary="修改个人密码")
+@router.post(
+    "/change-password",
+    summary="修改个人密码",
+    response_model=ApiResponse[None],
+)
 def change_current_password(payload: ChangePasswordRequest, db: DbSession, current_user: CurrentUser) -> dict:
     if payload.newPassword != payload.confirmPassword:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="两次输入的新密码不一致")
@@ -145,7 +171,11 @@ def change_current_password(payload: ChangePasswordRequest, db: DbSession, curre
     return success_response(message="密码修改成功")
 
 
-@router.get("/current/menus", summary="获取当前用户菜单")
+@router.get(
+    "/current/menus",
+    summary="获取当前用户菜单",
+    response_model=ApiResponse[list[MenuItem]],
+)
 def get_current_user_menus(db: DbSession, current_user: CurrentUser) -> dict:
     role_ids = [relation.role_id for relation in current_user.user_roles]
     if not role_ids:
@@ -160,13 +190,30 @@ def get_current_user_menus(db: DbSession, current_user: CurrentUser) -> dict:
     return success_response(tree)
 
 
-@router.get("/{user_id}", summary="获取用户详情")
-def get_user_detail(user_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.get(
+    "/{user_id}",
+    summary="获取用户详情",
+    response_model=ApiResponse[UserItem],
+)
+def get_user_detail(
+    user_id: Annotated[int, Path(title="用户 ID", description="要查询的用户主键 ID")],
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     return success_response(serialize_user(_get_user_or_404(db, user_id)))
 
 
-@router.put("/{user_id}", summary="更新用户")
-def update_user(user_id: int, payload: UserUpdateRequest, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.put(
+    "/{user_id}",
+    summary="更新用户",
+    response_model=ApiResponse[UserItem],
+)
+def update_user(
+    user_id: Annotated[int, Path(title="用户 ID", description="要更新的用户主键 ID")],
+    payload: UserUpdateRequest,
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     user = _get_user_or_404(db, user_id)
     _assert_username_unique(db, payload.username, exclude_user_id=user_id)
     _assert_email_unique(db, payload.email, exclude_user_id=user_id)
@@ -183,8 +230,16 @@ def update_user(user_id: int, payload: UserUpdateRequest, db: DbSession, _curren
     return success_response(serialize_user(_get_user_or_404(db, user_id)), message="更新成功")
 
 
-@router.delete("/{user_id}", summary="删除用户")
-def delete_user(user_id: int, db: DbSession, current_user: CurrentUser) -> dict:
+@router.delete(
+    "/{user_id}",
+    summary="删除用户",
+    response_model=ApiResponse[None],
+)
+def delete_user(
+    user_id: Annotated[int, Path(title="用户 ID", description="要删除的用户主键 ID")],
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
     if user_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能删除当前登录用户")
     user = _get_user_or_404(db, user_id)
@@ -195,8 +250,17 @@ def delete_user(user_id: int, db: DbSession, current_user: CurrentUser) -> dict:
     return success_response(message="删除成功")
 
 
-@router.post("/{user_id}/roles", summary="分配用户角色")
-def assign_user_roles(user_id: int, payload: AssignRolesRequest, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.post(
+    "/{user_id}/roles",
+    summary="分配用户角色",
+    response_model=ApiResponse[UserItem],
+)
+def assign_user_roles(
+    user_id: Annotated[int, Path(title="用户 ID", description="要分配角色的用户主键 ID")],
+    payload: AssignRolesRequest,
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     user = _get_user_or_404(db, user_id)
     role_ids = sorted(set(payload.roleIds))
     if role_ids:
@@ -212,9 +276,13 @@ def assign_user_roles(user_id: int, payload: AssignRolesRequest, db: DbSession, 
     return success_response(serialize_user(_get_user_or_404(db, user.id)), message="角色分配成功")
 
 
-@router.post("/{user_id}/password", summary="修改用户密码")
+@router.post(
+    "/{user_id}/password",
+    summary="修改用户密码",
+    response_model=ApiResponse[None],
+)
 def change_user_password(
-    user_id: int,
+    user_id: Annotated[int, Path(title="用户 ID", description="要修改密码的用户主键 ID")],
     payload: AdminChangePasswordRequest,
     db: DbSession,
     current_user: CurrentUser,

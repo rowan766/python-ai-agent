@@ -12,8 +12,8 @@ _captcha_chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 _captcha_key_prefix = f"{settings.redis_key_prefix}:captcha"
 
 
-def _build_captcha_key(captcha_id: str) -> str:
-    return f"{_captcha_key_prefix}:{captcha_id}"
+def _build_captcha_code_key(captcha_id: str) -> str:
+    return f"{_captcha_key_prefix}:code:{captcha_id}"
 
 
 def _build_svg(code: str) -> str:
@@ -50,17 +50,17 @@ def _build_svg(code: str) -> str:
 def generate_captcha() -> tuple[str, str]:
     captcha_id = uuid.uuid4().hex
     code = "".join(random.choice(_captcha_chars) for _ in range(4))
+    captcha_svg = _build_svg(code)
     redis_client.setex(
-        _build_captcha_key(captcha_id),
+        _build_captcha_code_key(captcha_id),
         timedelta(seconds=settings.captcha_ttl_seconds),
         code,
     )
-    return captcha_id, _build_svg(code)
+    return captcha_id, captcha_svg
 
 
 def verify_captcha(captcha_id: str, captcha_code: str) -> bool:
-    key = _build_captcha_key(captcha_id)
-    code = redis_client.getdel(key)
+    code = redis_client.getdel(_build_captcha_code_key(captcha_id))
     if not code:
         return False
     return code.upper() == (captcha_code or "").strip().upper()

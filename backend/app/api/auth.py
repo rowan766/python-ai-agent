@@ -8,20 +8,35 @@ from app.core.deps import DbSession
 from app.core.http import success_response
 from app.core.security import create_access_token, verify_password
 from app.models import User
-from app.schemas import LoginRequest
+from app.schemas import ApiResponse, CaptchaData, LoginData, LoginRequest
 from app.services.serializers import serialize_user
 
 
 router = APIRouter(prefix="/auth", tags=["认证管理"])
 
 
-@router.get("/captcha", summary="获取验证码")
+@router.get(
+    "/captcha",
+    summary="获取验证码",
+    response_model=ApiResponse[CaptchaData],
+    openapi_extra={"security": []},
+)
 def get_captcha() -> dict:
     captcha_id, captcha_svg = generate_captcha()
-    return success_response({"captchaId": captcha_id, "captchaSvg": captcha_svg})
+    return success_response(
+        {
+            "captchaId": captcha_id,
+            "captchaSvg": captcha_svg,
+        }
+    )
 
 
-@router.post("/login", summary="用户登录")
+@router.post(
+    "/login",
+    summary="用户登录",
+    response_model=ApiResponse[LoginData],
+    openapi_extra={"security": []},
+)
 def login(payload: LoginRequest, db: DbSession) -> dict:
     if not verify_captcha(payload.captchaId, payload.captchaCode):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="验证码错误或已过期")
@@ -46,6 +61,11 @@ def login(payload: LoginRequest, db: DbSession) -> dict:
     )
 
 
-@router.post("/logout", summary="退出登录")
+@router.post(
+    "/logout",
+    summary="退出登录",
+    response_model=ApiResponse[None],
+    openapi_extra={"security": []},
+)
 def logout() -> dict:
     return success_response(message="退出成功")

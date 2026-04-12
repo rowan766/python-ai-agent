@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,16 +11,20 @@ from app.models import User
 
 
 DbSession = Annotated[Session, Depends(get_db)]
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    description="填写登录接口返回的 access_token 即可，文档会自动按 Bearer Token 方式附加到请求头。",
+)
 
 
 def get_current_user(
     db: DbSession,
-    authorization: Annotated[str | None, Header()] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
 ) -> User:
-    if not authorization or not authorization.lower().startswith("bearer "):
+    if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未登录或登录已过期")
 
-    token = authorization.split(" ", 1)[1].strip()
+    token = credentials.credentials.strip()
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录状态已失效，请重新登录")

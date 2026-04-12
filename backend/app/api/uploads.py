@@ -1,4 +1,6 @@
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, Path, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
@@ -6,6 +8,7 @@ from app.core.config import get_settings
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import success_response
 from app.models import Document, DocumentTask, FileRecord
+from app.schemas import ApiResponse, FileRecordItem, UploadFileResult
 from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_task
 from app.services.object_storage import (
     build_download_headers,
@@ -100,11 +103,15 @@ def _get_file_or_404(db: DbSession, file_id: int) -> FileRecord:
     return file_record
 
 
-@router.post("/images", summary="上传图片")
+@router.post(
+    "/images",
+    summary="上传图片",
+    response_model=ApiResponse[list[FileRecordItem]],
+)
 def upload_images(
     db: DbSession,
     current_user: CurrentUser,
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(..., description="要上传的图片文件列表，支持一次上传多个文件"),
 ) -> dict:
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择要上传的图片")
@@ -122,11 +129,15 @@ def upload_images(
         raise
 
 
-@router.post("/files", summary="上传文件")
+@router.post(
+    "/files",
+    summary="上传文件",
+    response_model=ApiResponse[list[UploadFileResult]],
+)
 def upload_files(
     db: DbSession,
     current_user: CurrentUser,
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(..., description="要上传的文件列表，上传后会自动创建文档并加入处理队列"),
 ) -> dict:
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择要上传的文件")
@@ -158,7 +169,11 @@ def upload_files(
 
 
 @router.get("/image/{file_id}", summary="预览图片")
-def preview_image(file_id: int, db: DbSession, download: bool = Query(default=False)) -> StreamingResponse:
+def preview_image(
+    file_id: Annotated[int, Path(title="文件 ID", description="要预览的图片文件主键 ID")],
+    db: DbSession,
+    download: bool = Query(default=False, title="是否下载", description="是否以附件下载方式返回图片"),
+) -> StreamingResponse:
     file_record = _get_file_or_404(db, file_id)
     object_response = get_minio_object(file_record.file_name)
     response = StreamingResponse(
@@ -170,7 +185,10 @@ def preview_image(file_id: int, db: DbSession, download: bool = Query(default=Fa
 
 
 @router.get("/file/{file_id}/download", summary="下载文件")
-def download_file(file_id: int, db: DbSession) -> StreamingResponse:
+def download_file(
+    file_id: Annotated[int, Path(title="文件 ID", description="要下载的文件主键 ID")],
+    db: DbSession,
+) -> StreamingResponse:
     file_record = _get_file_or_404(db, file_id)
     object_response = get_minio_object(file_record.file_name)
     response = StreamingResponse(
@@ -181,8 +199,16 @@ def download_file(file_id: int, db: DbSession) -> StreamingResponse:
     return response
 
 
-@router.delete("/file/{file_id}", summary="删除上传文件")
-def delete_uploaded_file(file_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
+@router.delete(
+    "/file/{file_id}",
+    summary="删除上传文件",
+    response_model=ApiResponse[None],
+)
+def delete_uploaded_file(
+    file_id: Annotated[int, Path(title="文件 ID", description="要删除的文件主键 ID")],
+    db: DbSession,
+    _current_user: CurrentUser,
+) -> dict:
     file_record = _get_file_or_404(db, file_id)
     document = db.scalar(select(Document).where(Document.file_id == file_id))
     if document:

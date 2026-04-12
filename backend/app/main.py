@@ -94,7 +94,7 @@ app = FastAPI(
 
 DOCS_CAPTCHA_PANEL_HTML = """
 <div id="scalar-captcha-panel" aria-live="polite" hidden>
-  <div class="scalar-captcha-panel__header">
+  <div class="scalar-captcha-panel__header" id="scalar-captcha-drag-handle">
     <div>
       <div class="scalar-captcha-panel__title">验证码预览</div>
       <div class="scalar-captcha-panel__desc">调用 <code>GET /auth/captcha</code> 后，最新验证码会显示在这里，方便继续调登录接口。</div>
@@ -138,6 +138,7 @@ DOCS_CAPTCHA_PANEL_SCRIPT = """
 
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     meta.textContent = `captchaId: ${captchaId}`;
+    panel.style.zIndex = '2147483647';
     panel.hidden = false;
   };
 
@@ -158,6 +159,47 @@ DOCS_CAPTCHA_PANEL_SCRIPT = """
     if (!closeButton || !panel) return;
     closeButton.addEventListener('click', () => {
       panel.hidden = true;
+    });
+  };
+
+  const initDrag = () => {
+    const panel = document.getElementById(CAPTCHA_PANEL_ID);
+    const handle = document.getElementById('scalar-captcha-drag-handle');
+    if (!panel || !handle) return;
+
+    let isDragging = false;
+    let offsetX = 0, offsetY = 0;
+
+    handle.style.cursor = 'grab';
+
+    handle.addEventListener('mousedown', (e) => {
+      if (e.target.closest('#scalar-captcha-close')) return;
+      isDragging = true;
+      panel.style.zIndex = '2147483647';
+      handle.style.cursor = 'grabbing';
+      const rect = panel.getBoundingClientRect();
+      offsetX = e.clientX - rect.left;
+      offsetY = e.clientY - rect.top;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      let newX = e.clientX - offsetX;
+      let newY = e.clientY - offsetY;
+      newX = Math.max(0, Math.min(newX, window.innerWidth - panel.offsetWidth));
+      newY = Math.max(0, Math.min(newY, window.innerHeight - panel.offsetHeight));
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      panel.style.left = newX + 'px';
+      panel.style.top = newY + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        handle.style.cursor = 'grab';
+      }
     });
   };
 
@@ -203,6 +245,7 @@ DOCS_CAPTCHA_PANEL_SCRIPT = """
     mountPanelEvents();
     patchFetch();
     patchXHR();
+    initDrag();
   };
 
   if (document.readyState === 'loading') {
@@ -220,7 +263,7 @@ DOCS_CAPTCHA_PANEL_STYLE = """
   position: fixed;
   right: 20px;
   bottom: 20px;
-  z-index: 9999;
+  z-index: 2147483647;
   width: min(420px, calc(100vw - 32px));
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(15, 23, 42, 0.12);
@@ -242,6 +285,11 @@ DOCS_CAPTCHA_PANEL_STYLE = """
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+  cursor: grab;
+}
+
+.scalar-captcha-panel__header:active {
+  cursor: grabbing;
 }
 
 .scalar-captcha-panel__title {

@@ -24,7 +24,7 @@ const redirectToLogin = () => {
 // 创建 axios 实例
 const request = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
   }

@@ -73,7 +73,7 @@ python-ai-agent/
 
 ## 环境要求
 
-- Python 3.11+
+- Python 3.11
 - Node.js 20+
 - Docker Desktop
 
@@ -174,21 +174,53 @@ powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -Mode compose -DryRun
 - MinIO Bucket：`admin-system`
 - 文档处理模式：`worker`
 
+## 千问 LLM 配置
+
+文档问答接口现在已经支持接入阿里云百炼千问模型，默认走 OpenAI 兼容接法：
+
+- Provider：`dashscope`
+- Base URL：`https://dashscope.aliyuncs.com/compatible-mode/v1`
+- 默认模型：`qwen-plus`
+
+你只需要在 [backend/.env](D:/study_python_20260404/python-ai-agent/backend/.env) 里填入：
+
+```env
+LLM_API_KEY=你的阿里云百炼 API Key
+```
+
+可选配置：
+
+```env
+LLM_MODEL_NAME=qwen-plus
+LLM_TEMPERATURE=0.2
+LLM_MAX_TOKENS=900
+```
+
+说明：
+
+- 配置了 `LLM_API_KEY` 后，`/document/qa` 会走“检索 + 千问生成式回答”
+- 如果没有配置 Key，系统会自动回退成当前的检索摘要模式，不会影响页面使用
+
 ## 后端启动
 
 第一次安装依赖：
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-uv venv .venv-fastapi
-uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous minio pillow pydantic-settings pypdf psycopg[binary] python-multipart qdrant-client rapidocr-onnxruntime redis scalar-fastapi sqlalchemy "uvicorn[standard]"
+uv venv --python 3.11 .venv-fastapi311
+uv pip install --python .venv-fastapi311\Scripts\python.exe -r requirements.txt
 ```
+
+说明：
+
+- 本地后端现在推荐固定使用 `Python 3.11`
+- 原因是 `fastembed / onnxruntime` 在这套环境里更稳定，能真正启用正式 embedding，而不是退回 hash 向量
 
 启动后端：
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
 后端启动后：
@@ -267,7 +299,7 @@ docker compose up -d postgres redis minio qdrant document-worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
 这条命令的作用：
@@ -346,7 +378,7 @@ docker compose up -d postgres redis minio qdrant document-worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
 作用：
@@ -398,6 +430,7 @@ pnpm dev
 - chunk 元数据写入 PostgreSQL
 - chunk 自动写入 Qdrant
 - 已提供基础文档检索接口
+- 已提供基于千问的文档问答接口
 
 当前已提供的接口分组：
 
@@ -417,7 +450,8 @@ pnpm dev
 - 图片类文件已支持 OCR：`png / jpg / jpeg / bmp / gif / webp / tif / tiff`
 - 扫描版 PDF 会在“提取不到文本”时自动尝试 OCR
 - 文档处理成功后，chunk 会自动写入 Qdrant
-- 当前检索层已经可用，后面还可以继续升级为更强的 embedding 模型
+- 当前本地 Python 3.11 环境已可启用 `fastembed` 正式 embedding 模型
+- 当前检索层已经支持向量召回、关键词补偿、权限过滤和千问 RAG 问答
 
 当前文档处理已经切成独立 worker 模式，Web API 只负责入队，不在主线程里直接做 OCR 或切片。
 

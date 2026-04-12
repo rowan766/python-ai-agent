@@ -101,12 +101,18 @@
               <el-tag :type="getStatusTagType(row.status)" effect="light">{{ getStatusText(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="parseMode" label="解析模式" width="100" align="center" />
+          <el-table-column label="解析反馈" width="140" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getParseModeTagType(row.parseMode)" effect="light">
+                {{ getParseModeText(row.parseMode) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="chunkCount" label="切片数" width="90" align="center" />
           <el-table-column prop="textLength" label="文本长度" width="110" align="center" />
           <el-table-column prop="processedAt" label="处理完成时间" min-width="170" align="center" />
           <el-table-column prop="createdAt" label="上传时间" min-width="170" align="center" />
-          <el-table-column label="操作" width="260" fixed="right" align="center">
+          <el-table-column label="操作" width="340" fixed="right" align="center">
             <template #default="{ row }">
               <div class="table-actions">
                 <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="View" @click="handleOpenDetail(row)">详情</CrudButton>
@@ -121,6 +127,16 @@
                   重试
                 </CrudButton>
                 <CrudButton style-type="primary" size-variant="table" tone="gray" :icon="Download" @click="handleDownload(row)">下载</CrudButton>
+                <CrudButton
+                  style-type="primary"
+                  size-variant="table"
+                  tone="red"
+                  :icon="Delete"
+                  :disabled="row.status === 'processing'"
+                  @click="handleDelete(row)"
+                >
+                  删除
+                </CrudButton>
               </div>
             </template>
           </el-table-column>
@@ -189,6 +205,11 @@
           <el-descriptions-item label="处理状态">
             <el-tag :type="getStatusTagType(documentDetail.status)" effect="light">
               {{ getStatusText(documentDetail.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="解析反馈">
+            <el-tag :type="getParseModeTagType(documentDetail.parseMode)" effect="light">
+              {{ getParseModeText(documentDetail.parseMode) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="切片数量">{{ documentDetail.chunkCount }}</el-descriptions-item>
@@ -263,6 +284,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Connection,
+  Delete,
   DocumentCopy,
   Download,
   Files,
@@ -276,6 +298,7 @@ import CrudButton from '../../components/crud/CrudButton.vue'
 import CrudTable from '../../components/crud/CrudTable.vue'
 import CrudToolbar from '../../components/crud/CrudToolbar.vue'
 import {
+  deleteDocument,
   getDocumentChunks,
   getDocumentDetail,
   getDocumentList,
@@ -372,6 +395,28 @@ const getStatusTagType = (status) => {
     failed: 'danger'
   }
   return tagMap[status] || 'info'
+}
+
+const getParseModeText = (parseMode) => {
+  const parseModeMap = {
+    auto: '自动识别',
+    text_direct: '文本提取成功',
+    pdf_text: 'PDF 文本提取成功',
+    pdf_ocr_fallback: 'OCR 回退成功',
+    image_ocr: 'OCR 识别成功'
+  }
+  return parseModeMap[parseMode] || parseMode || '-'
+}
+
+const getParseModeTagType = (parseMode) => {
+  const parseModeTypeMap = {
+    auto: 'info',
+    text_direct: 'success',
+    pdf_text: 'success',
+    pdf_ocr_fallback: 'warning',
+    image_ocr: 'primary'
+  }
+  return parseModeTypeMap[parseMode] || 'info'
 }
 
 const getSearchPreview = (content = '') => {
@@ -539,6 +584,44 @@ const handleDownload = async (row) => {
     URL.revokeObjectURL(downloadUrl)
   } catch (error) {
     // 错误提示由拦截器处理
+  }
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除文档“${row.title}”吗？删除后会同时清理 MinIO 文件、向量索引和数据库关联数据，且无法恢复。`,
+      '删除文档',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+    const response = await deleteDocument(row.id)
+    ElMessage.success(response?.message || '文档已删除')
+
+    if (currentDetailDocumentId.value === row.id) {
+      detailDrawerVisible.value = false
+      handleDetailDrawerClosed()
+    }
+
+    searchResults.value = searchResults.value.filter((item) => item.documentId !== row.id)
+    if (activeSearchResult.value?.documentId === row.id) {
+      activeSearchResult.value = null
+      searchPreviewVisible.value = false
+    }
+
+    if (tableData.value.length === 1 && pagination.page > 1) {
+      pagination.page -= 1
+    }
+
+    await refreshAll()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      // 错误提示由拦截器处理
+    }
   }
 }
 

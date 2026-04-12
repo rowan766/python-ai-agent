@@ -390,7 +390,9 @@ class DocumentQueueStatusData(BaseModel):
 
 
 class DocumentSearchHit(BaseModel):
-    score: float = Field(title="相似度分数", description="向量检索返回的相似度分数")
+    score: float = Field(title="综合分数", description="向量召回与关键词补偿混合后的综合排序分数")
+    vectorScore: float | None = Field(default=None, title="向量分数", description="向量召回得到的原始分数")
+    keywordScore: float | None = Field(default=None, title="关键词分数", description="关键词匹配得到的补充分数")
     chunkId: int = Field(title="切片 ID", description="命中的切片 ID")
     documentId: int = Field(title="文档 ID", description="命中的文档 ID")
     chunkIndex: int = Field(title="切片序号", description="命中的切片序号")
@@ -401,6 +403,30 @@ class DocumentSearchHit(BaseModel):
 class ReprocessDocumentData(BaseModel):
     document: DocumentItem = Field(title="文档信息", description="重新入队后的文档详情")
     task: DocumentTaskItem = Field(title="任务信息", description="本次重新处理对应的任务信息")
+
+
+class DocumentQaRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=400, title="问题", description="用户发起的检索问答问题")
+    limit: int = Field(default=4, ge=1, le=10, title="命中数量", description="问答前召回的切片数量")
+    documentId: int | None = Field(default=None, title="文档 ID", description="限定在某份文档内进行问答")
+
+
+class DocumentQaSourceItem(BaseModel):
+    documentId: int | None = Field(default=None, title="文档 ID", description="命中来源文档 ID")
+    documentTitle: str | None = Field(default=None, title="文档标题", description="命中来源文档标题")
+    chunkId: int | None = Field(default=None, title="切片 ID", description="命中的切片 ID")
+    chunkIndex: int | None = Field(default=None, title="切片序号", description="命中的切片序号")
+    score: float | None = Field(default=None, title="综合分数", description="切片综合排序分数")
+    content: str | None = Field(default=None, title="切片内容", description="切片原始内容")
+
+
+class DocumentQaData(BaseModel):
+    question: str = Field(title="问题", description="用户发起的原始问题")
+    answer: str = Field(title="答案", description="基于检索结果生成的预览答案")
+    answerMode: str = Field(title="回答模式", description="当前回答生成模式")
+    answerModel: str | None = Field(default=None, title="回答模型", description="当前用于生成回答的模型名称")
+    retrievalCount: int = Field(default=0, title="命中数量", description="本次问答引用的切片数量")
+    sources: list[DocumentQaSourceItem] = Field(default_factory=list, title="来源切片", description="本次回答参考的切片列表")
 
 
 class UploadFileResult(FileRecordItem):

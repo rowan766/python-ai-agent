@@ -137,13 +137,14 @@ docker compose up -d postgres redis minio qdrant document-worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
 这条命令的作用：
 
 - 启动本地 Python 后端
 - 方便直接调试 FastAPI 代码
+- 本地推荐固定使用 Python 3.11 虚拟环境，这样文档检索能启用正式 embedding
 
 3. 启动前端
 
@@ -167,6 +168,14 @@ pnpm dev
 
 - 后台管理员：`admin / 123456`
 - MinIO：`minioadmin / minioadmin`
+
+如果你要联调“文档问答”页面，别忘了在后端 [backend/.env](../backend/.env) 中配置：
+
+```env
+LLM_API_KEY=你的阿里云百炼 API Key
+```
+
+默认会接到阿里云百炼 OpenAI 兼容地址，并使用 `qwen-plus` 模型。
 
 ## 和后端联调前建议确认
 

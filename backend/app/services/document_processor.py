@@ -36,11 +36,51 @@ class TextChunk:
     char_end: int
 
 
+@dataclass
+class ExtractedDocumentText:
+    text: str
+    parse_mode: str
+
+
 def _normalize_text(text: str) -> str:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     normalized = re.sub(r"[ \t]+\n", "\n", normalized)
     return normalized.strip()
+
+
+def _split_sentences(block: str) -> list[str]:
+    sentences = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s+|\n+", block) if item and item.strip()]
+    return sentences or [block.strip()]
+
+
+def _split_text_units(text: str, *, max_unit_size: int) -> list[str]:
+    units: list[str] = []
+    blocks = [block.strip() for block in re.split(r"\n{2,}", text) if block and block.strip()]
+    for block in blocks or [text]:
+        if len(block) <= max_unit_size:
+            units.append(block)
+            continue
+
+        buffer = ""
+        for sentence in _split_sentences(block):
+            if not buffer:
+                buffer = sentence
+                continue
+            if len(buffer) + 1 + len(sentence) <= max_unit_size:
+                buffer = f"{buffer} {sentence}"
+                continue
+            units.append(buffer)
+            buffer = sentence
+
+        if buffer:
+            if len(buffer) <= max_unit_size:
+                units.append(buffer)
+            else:
+                for start in range(0, len(buffer), max_unit_size):
+                    units.append(buffer[start : start + max_unit_size].strip())
+
+    return [unit for unit in units if unit]
 
 
 def _decode_bytes(data: bytes) -> str:
@@ -100,27 +140,39 @@ def _extract_text_from_pdf(data: bytes) -> str:
     return _normalize_text("\n\n".join(page_texts))
 
 
-def extract_document_text(file_record: FileRecord) -> str:
+def extract_document_text(file_record: FileRecord) -> ExtractedDocumentText:
     extension = Path(file_record.original_name or file_record.file_name).suffix.lower()
     data = _read_object_bytes(file_record.file_name)
 
     if extension in TEXT_EXTENSIONS or file_record.mime_type.startswith("text/"):
-        return _normalize_text(_decode_bytes(data))
+        return ExtractedDocumentText(
+            text=_normalize_text(_decode_bytes(data)),
+            parse_mode="text_direct",
+        )
 
     if extension == ".pdf" or file_record.mime_type == "application/pdf":
         extracted_text = _extract_text_from_pdf(data)
         if extracted_text:
-            return extracted_text
+            return ExtractedDocumentText(
+                text=extracted_text,
+                parse_mode="pdf_text",
+            )
 
         ocr_text = _extract_text_from_pdf_ocr(data)
         if ocr_text:
-            return ocr_text
+            return ExtractedDocumentText(
+                text=ocr_text,
+                parse_mode="pdf_ocr_fallback",
+            )
         raise DocumentProcessingError("PDF 未提取到可用文本，且 OCR 结果为空")
 
     if extension in IMAGE_EXTENSIONS or file_record.mime_type.startswith("image/"):
         extracted_text = _extract_text_from_ocr_bytes(data)
         if extracted_text:
-            return extracted_text
+            return ExtractedDocumentText(
+                text=extracted_text,
+                parse_mode="image_ocr",
+            )
         raise DocumentProcessingError("图片类文档 OCR 结果为空")
 
     raise DocumentProcessingError(f"暂不支持解析该文件类型：{extension or file_record.mime_type}")
@@ -133,35 +185,58 @@ def build_text_chunks(text: str, *, chunk_size: int, chunk_overlap: int) -> list
 
     safe_overlap = max(0, min(chunk_overlap, chunk_size - 1))
     chunks: list[TextChunk] = []
-    start = 0
     index = 0
-    text_length = len(normalized)
+    cursor = 0
+    units = _split_text_units(normalized, max_unit_size=max(chunk_size // 2, 180))
+    current_chunk = ""
+    chunk_start = 0
 
-    while start < text_length:
-        end = min(start + chunk_size, text_length)
-        if end < text_length:
-            paragraph_break = normalized.rfind("\n\n", start, end)
-            line_break = normalized.rfind("\n", start, end)
-            if paragraph_break > start + chunk_size // 2:
-                end = paragraph_break
-            elif line_break > start + chunk_size // 2:
-                end = line_break
+    for unit in units:
+        unit_start = normalized.find(unit, cursor)
+        if unit_start == -1:
+            unit_start = cursor
+        unit_end = unit_start + len(unit)
+        cursor = unit_end
 
-        chunk_text = normalized[start:end].strip()
-        if chunk_text:
-            chunks.append(
-                TextChunk(
-                    index=index,
-                    content=chunk_text,
-                    char_start=start,
-                    char_end=end,
-                )
+        if not current_chunk:
+            current_chunk = unit
+            chunk_start = unit_start
+            continue
+
+        proposed = f"{current_chunk}\n\n{unit}"
+        if len(proposed) <= chunk_size:
+            current_chunk = proposed
+            continue
+
+        chunk_end = chunk_start + len(current_chunk)
+        chunks.append(
+            TextChunk(
+                index=index,
+                content=current_chunk.strip(),
+                char_start=chunk_start,
+                char_end=chunk_end,
             )
-            index += 1
+        )
+        index += 1
 
-        if end >= text_length:
-            break
-        start = max(end - safe_overlap, start + 1)
+        overlap_text = current_chunk[-safe_overlap:].strip() if safe_overlap else ""
+        if overlap_text:
+            overlap_start = max(chunk_end - len(overlap_text), chunk_start)
+            current_chunk = f"{overlap_text}\n\n{unit}".strip()
+            chunk_start = overlap_start
+        else:
+            current_chunk = unit
+            chunk_start = unit_start
+
+    if current_chunk:
+        chunks.append(
+            TextChunk(
+                index=index,
+                content=current_chunk.strip(),
+                char_start=chunk_start,
+                char_end=chunk_start + len(current_chunk),
+            )
+        )
 
     return chunks
 
@@ -191,9 +266,9 @@ def process_document_task(task_id: int) -> bool:
         db.commit()
 
         try:
-            extracted_text = extract_document_text(document.file_record)
+            extraction_result = extract_document_text(document.file_record)
             chunks = build_text_chunks(
-                extracted_text,
+                extraction_result.text,
                 chunk_size=settings.document_chunk_size,
                 chunk_overlap=settings.document_chunk_overlap,
             )
@@ -216,6 +291,7 @@ def process_document_task(task_id: int) -> bool:
                                 "sourceFileId": document.file_id,
                                 "sourceFileName": document.file_name,
                                 "mimeType": document.mime_type,
+                                "parseMode": extraction_result.parse_mode,
                             },
                             ensure_ascii=False,
                         ),
@@ -238,7 +314,8 @@ def process_document_task(task_id: int) -> bool:
             task.finished_at = finished_at
             task.error_message = None
             document.status = "success"
-            document.text_length = len(extracted_text)
+            document.parse_mode = extraction_result.parse_mode
+            document.text_length = len(extraction_result.text)
             document.chunk_count = len(chunks)
             document.error_message = None
             document.processed_at = finished_at

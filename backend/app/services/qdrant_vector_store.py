@@ -6,7 +6,7 @@ from qdrant_client.http import models as rest
 
 from app.core.config import get_settings
 from app.models import DocumentChunk
-from app.services.embedding import embed_text, embed_texts
+from app.services.embedding import embed_passages, embed_query
 
 
 settings = get_settings()
@@ -72,7 +72,7 @@ def upsert_document_chunks(document_id: int, chunks: list[DocumentChunk]) -> int
         delete_document_vectors(document_id)
         return 0
 
-    vectors = embed_texts([chunk.content for chunk in chunks])
+    vectors = embed_passages([chunk.content for chunk in chunks])
     points = []
     for chunk, vector in zip(chunks, vectors, strict=False):
         points.append(
@@ -103,12 +103,23 @@ def upsert_document_chunks(document_id: int, chunks: list[DocumentChunk]) -> int
         raise _build_qdrant_error(exc) from exc
 
 
-def search_document_chunks(query: str, limit: int = 5) -> list[dict]:
+def search_document_chunks(query: str, limit: int = 5, document_ids: list[int] | None = None) -> list[dict]:
     try:
-        query_vector = embed_text(query)
+        query_vector = embed_query(query)
+        query_filter = None
+        if document_ids:
+            query_filter = rest.Filter(
+                must=[
+                    rest.FieldCondition(
+                        key="documentId",
+                        match=rest.MatchAny(any=document_ids),
+                    )
+                ]
+            )
         response = get_qdrant_client().query_points(
             collection_name=settings.qdrant_collection_name,
             query=query_vector,
+            query_filter=query_filter,
             limit=limit,
             with_payload=True,
         )

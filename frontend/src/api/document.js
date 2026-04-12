@@ -20,6 +20,14 @@ export const reprocessDocument = (id, data = { force: false }) => {
   return request.post(`/document/${id}/reprocess`, data)
 }
 
+export const deleteDocument = (id) => {
+  return request.delete(`/document/${id}`)
+}
+
 export const searchDocumentChunks = (params) => {
   return request.get('/document/search', { params })
+}
+
+export const askDocumentQuestion = (data) => {
+  return request.post('/document/qa', data, { timeout: 60000 })
 }

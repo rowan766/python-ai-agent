@@ -42,7 +42,7 @@ openapi_tags = [
     {"name": "部门管理", "description": "部门树维护接口"},
     {"name": "数据字典", "description": "字典类型与字典数据接口"},
     {"name": "文件上传", "description": "图片、文件上传与下载接口"},
-    {"name": "文档处理", "description": "文档入队、任务状态与切片结果接口"},
+    {"name": "文档处理", "description": "文档入队、任务状态、切片检索与 RAG 问答接口"},
 ]
 
 
@@ -68,6 +68,11 @@ async def lifespan(_app: FastAPI):
     if settings.document_processing_mode == "worker":
         print("文档处理模式: worker，请单独启动文档处理 Worker")
     print(f"Qdrant 地址: {settings.qdrant_url}")
+    print(f"Embedding 模型: {settings.embedding_provider} / {settings.embedding_model_name}")
+    if settings.llm_enabled:
+        print(f"LLM 模型: {settings.llm_provider} / {settings.llm_model_name}")
+    else:
+        print("LLM 状态: 未配置 API Key，文档问答将回退为检索摘要模式")
     if qdrant_ready:
         print("Qdrant 状态: 已连接，可进行向量写入与检索")
     else:

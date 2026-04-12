@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,10 +27,27 @@ class Settings(BaseSettings):
     document_processing_mode: str = "worker"
     document_chunk_size: int = 800
     document_chunk_overlap: int = 120
+    embedding_provider: str = "fastembed"
+    embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_batch_size: int = 32
+    embedding_fallback_to_hash: bool = True
     embedding_vector_size: int = 384
     qdrant_url: str = "http://127.0.0.1:6333"
     qdrant_api_key: str | None = None
     qdrant_collection_name: str = "document_chunks"
+    retrieval_default_limit: int = 8
+    retrieval_candidate_limit: int = 24
+    retrieval_keyword_weight: float = 0.22
+    retrieval_exact_match_bonus: float = 0.08
+    rag_answer_max_chunks: int = 4
+    rag_answer_max_context_chars: int = 2400
+    llm_provider: str = "dashscope"
+    llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    llm_api_key: str | None = Field(default=None, validation_alias=AliasChoices("LLM_API_KEY", "DASHSCOPE_API_KEY"))
+    llm_model_name: str = "qwen-plus"
+    llm_temperature: float = 0.2
+    llm_max_tokens: int = 900
+    llm_timeout_seconds: float = 60.0
     redis_url: str = "redis://127.0.0.1:6379/0"
     minio_endpoint: str = "127.0.0.1:9000"
     minio_access_key: str = "minioadmin"
@@ -69,6 +87,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def llm_enabled(self) -> bool:
+        return bool((self.llm_api_key or "").strip())
 
 
 @lru_cache

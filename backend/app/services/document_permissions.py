@@ -74,11 +74,15 @@ def build_document_permission_clause(db, current_user) -> object | None:
     return or_(*clauses)
 
 
-def get_accessible_document_ids(db, current_user, *, document_id: int | None = None) -> list[int]:
+def get_accessible_document_ids(db, current_user, *, document_id: int | None = None, document_ids: list[int] | None = None) -> list[int]:
     statement = select(Document.id)
     permission_clause = build_document_permission_clause(db, current_user)
     if permission_clause is not None:
         statement = statement.where(permission_clause)
+
     if document_id is not None:
         statement = statement.where(Document.id == document_id)
+    elif document_ids is not None and len(document_ids) > 0:
+        statement = statement.where(Document.id.in_(document_ids))
+
     return list(db.scalars(statement).all())

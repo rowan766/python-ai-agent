@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from app.core.config import get_settings
-from app.services.llm_service import LlmUnavailableError, generate_rag_answer
+from app.services.llm_service import LlmUnavailableError, generate_follow_up_suggestions, generate_rag_answer
 
 
 logger = logging.getLogger("app.rag_answer")
@@ -86,13 +86,13 @@ def _build_llm_context_blocks(sources: list[dict[str, Any]]) -> list[str]:
     return context_blocks
 
 
-def answer_question_from_hits(question: str, hits: list[dict[str, Any]]) -> dict[str, Any]:
+def answer_question_from_hits(question: str, hits: list[dict[str, Any]], history: list[dict[str, str]] | None = None) -> dict[str, Any]:
     answer, sources = _build_extractive_answer(question, hits)
     answer_mode = "extractive-preview"
 
     if sources:
         try:
-            answer = generate_rag_answer(question, _build_llm_context_blocks(sources))
+            answer = generate_rag_answer(question, _build_llm_context_blocks(sources), history=history)
             answer_mode = "llm-rag"
         except LlmUnavailableError as exc:
             logger.warning("LLM 不可用，回退到检索摘要: %s", exc)
@@ -101,6 +101,14 @@ def answer_question_from_hits(question: str, hits: list[dict[str, Any]]) -> dict
             logger.error("LLM 调用异常，回退到检索摘要: %s", exc, exc_info=True)
             answer_mode = "extractive-preview"
 
+    # Generate follow-up suggestions
+    suggestions = []
+    if answer_mode == "llm-rag":
+        try:
+            suggestions = generate_follow_up_suggestions(question, answer)
+        except Exception:
+            pass
+
     return {
         "question": question,
         "answer": answer,
@@ -108,4 +116,5 @@ def answer_question_from_hits(question: str, hits: list[dict[str, Any]]) -> dict
         "answerModel": settings.llm_model_name if answer_mode == "llm-rag" else None,
         "sources": sources,
         "retrievalCount": len(sources),
+        "suggestions": suggestions,
     }

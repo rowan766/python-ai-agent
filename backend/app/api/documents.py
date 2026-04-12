@@ -291,11 +291,16 @@ def document_qa(
     if not question:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="问题不能为空")
 
+    history = None
+    if payload.history:
+        history = [{"role": m.role, "content": m.content} for m in payload.history if m.role in ("user", "assistant")]
+
     hits = retrieve_document_chunks(
         db,
         current_user,
         query=question,
         limit=payload.limit,
-        document_id=payload.documentId,
+        document_id=payload.documentIds[0] if payload.documentIds and len(payload.documentIds) == 1 else None,
+        document_ids=payload.documentIds if payload.documentIds and len(payload.documentIds) > 1 else None,
     )
-    return success_response(answer_question_from_hits(question, hits))
+    return success_response(answer_question_from_hits(question, hits, history=history))

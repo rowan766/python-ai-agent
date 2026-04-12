@@ -64,8 +64,9 @@ def retrieve_document_chunks(
     query: str,
     limit: int,
     document_id: int | None = None,
+    document_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
-    accessible_document_ids = get_accessible_document_ids(db, current_user, document_id=document_id)
+    accessible_document_ids = get_accessible_document_ids(db, current_user, document_id=document_id, document_ids=document_ids)
     if not accessible_document_ids:
         return []
 

@@ -56,40 +56,85 @@ def get_llm_client() -> OpenAI:
     )
 
 
-def generate_rag_answer(question: str, context_blocks: list[str]) -> str:
+def generate_rag_answer(question: str, context_blocks: list[str], history: list[dict[str, str]] | None = None) -> str:
     if not context_blocks:
         raise LlmUnavailableError("当前没有可用的检索上下文")
 
     client = get_llm_client()
     context_text = "\n\n".join(context_blocks)
-    logger.info("调用 LLM 生成回答: question=%s, context_blocks=%d, model=%s", question[:80], len(context_blocks), settings.llm_model_name)
+    logger.info("调用 LLM 生成回答: question=%s, context_blocks=%d, history=%d, model=%s", question[:80], len(context_blocks), len(history or []), settings.llm_model_name)
+
+    messages: list[dict[str, str]] = [
+        {
+            "role": "system",
+            "content": (
+                "你是企业知识库问答助手。"
+                "请严格依据提供的文档切片回答问题，不要编造未在上下文中出现的事实。"
+                '如果上下文不足以回答，请明确说明"当前文档上下文不足以给出确定答案"。'
+                "回答请使用中文，优先给出结论，再补充要点。"
+                '如引用多条上下文，可在句子中自然提到"来源1""来源2"等标记。'
+            ),
+        },
+    ]
+
+    if history:
+        for msg in history:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"用户问题：{question.strip()}\n\n"
+                "以下是检索到的文档上下文，请只基于这些内容回答：\n\n"
+                f"{context_text}"
+            ),
+        },
+    )
     completion = client.chat.completions.create(
         model=settings.llm_model_name,
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "你是企业知识库问答助手。"
-                    "请严格依据提供的文档切片回答问题，不要编造未在上下文中出现的事实。"
-                    '如果上下文不足以回答，请明确说明"当前文档上下文不足以给出确定答案"。'
-                    "回答请使用中文，优先给出结论，再补充要点。"
-                    '如引用多条上下文，可在句子中自然提到"来源1""来源2"等标记。'
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"用户问题：{question.strip()}\n\n"
-                    "以下是检索到的文档上下文，请只基于这些内容回答：\n\n"
-                    f"{context_text}"
-                ),
-            },
-        ],
+        messages=messages,
     )
     content = _normalize_text(completion.choices[0].message.content if completion.choices else "")
     logger.info("LLM 返回内容长度: %d 字符", len(content))
     if not content:
         raise LlmUnavailableError("LLM 未返回有效内容")
     return content
+
+
+def generate_follow_up_suggestions(question: str, answer: str) -> list[str]:
+    """根据用户问题和助手回答，生成 3 个追问建议。"""
+    client = get_llm_client()
+    logger.info("调用 LLM 生成追问建议: question=%s", question[:80])
+
+    completion = client.chat.completions.create(
+        model=settings.llm_model_name,
+        temperature=0.8,
+        max_tokens=300,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "你是知识库问答助手的追问建议生成器。"
+                    "根据用户的问题和助手的回答，生成 3 个用户可能想继续追问的简短问题。"
+                    "要求：\n"
+                    "1. 每个问题不超过 20 个字\n"
+                    "2. 问题必须与当前话题相关且有实际价值\n"
+                    "3. 不要重复用户已问过的问题\n"
+                    "4. 只输出 3 行问题文本，每行一个问题，不要编号、不要加引号、不要其他说明"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"用户问题：{question.strip()}\n\n助手回答：{answer[:500]}",
+            },
+        ],
+    )
+    raw = completion.choices[0].message.content if completion.choices else ""
+    suggestions = [line.strip() for line in raw.strip().split("\n") if line.strip()]
+    return suggestions[:3]

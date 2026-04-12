@@ -405,10 +405,16 @@ class ReprocessDocumentData(BaseModel):
     task: DocumentTaskItem = Field(title="任务信息", description="本次重新处理对应的任务信息")
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(title="角色", description="消息角色: user 或 assistant")
+    content: str = Field(title="内容", description="消息文本内容")
+
+
 class DocumentQaRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=400, title="问题", description="用户发起的检索问答问题")
+    question: str = Field(min_length=1, max_length=2000, title="问题", description="用户发起的检索问答问题")
     limit: int = Field(default=4, ge=1, le=10, title="命中数量", description="问答前召回的切片数量")
-    documentId: int | None = Field(default=None, title="文档 ID", description="限定在某份文档内进行问答")
+    documentIds: list[int] | None = Field(default=None, title="文档 ID 列表", description="限定在多份文档内进行问答，为空则检索全部可见文档")
+    history: list[ChatMessage] = Field(default_factory=list, title="对话历史", description="本轮之前的对话历史，用于多轮上下文")
 
 
 class DocumentQaSourceItem(BaseModel):
@@ -427,6 +433,12 @@ class DocumentQaData(BaseModel):
     answerModel: str | None = Field(default=None, title="回答模型", description="当前用于生成回答的模型名称")
     retrievalCount: int = Field(default=0, title="命中数量", description="本次问答引用的切片数量")
     sources: list[DocumentQaSourceItem] = Field(default_factory=list, title="来源切片", description="本次回答参考的切片列表")
+    suggestions: list[str] = Field(default_factory=list, title="追问建议", description="基于当前对话自动生成的 3 个追问建议")
+
+
+class FollowUpRequest(BaseModel):
+    question: str = Field(title="用户问题", description="用户最近一次提问的内容")
+    answer: str = Field(title="助手回答", description="助手对最近问题的回答内容")
 
 
 class UploadFileResult(FileRecordItem):

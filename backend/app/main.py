@@ -88,11 +88,6 @@ app = FastAPI(
 4. 将登录拿到的 `access_token` 填入后保存。
 5. 随后再测试需要token的其他接口，文档会自动附加 `Authorization: Bearer <token>` 请求头。
 6. 在文档里调 `GET /auth/captcha` 后，页面右下角会自动弹出验证码预览，可直接照着填写 `captchaCode和captchaId`。
-
-说明：
-
-- 文档里的 `username`、`password`、`captchaId` 这类字段名是接口真实参数名，不会改成中文。
-- 中文内容体现在参数标题、参数说明、响应模型说明中。
 """,
     lifespan=lifespan,
     docs_url=None,

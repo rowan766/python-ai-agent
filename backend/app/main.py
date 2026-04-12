@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.redis_client import get_redis_client
 from app.services.object_storage import ensure_minio_bucket
+from app.services.qdrant_vector_store import QdrantUnavailableError, ensure_qdrant_collection
 from app.services.seed import seed_database
 
 
@@ -42,6 +43,12 @@ async def lifespan(_app: FastAPI):
         settings.database_file_path.parent.mkdir(parents=True, exist_ok=True)
     get_redis_client().ping()
     ensure_minio_bucket()
+    qdrant_ready = False
+    try:
+        qdrant_ready = ensure_qdrant_collection()
+    except QdrantUnavailableError as exc:
+        logger.warning("Qdrant 初始化跳过: %s", exc)
+        print(f"Qdrant 初始化跳过: {exc}")
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_database(db)
@@ -51,6 +58,11 @@ async def lifespan(_app: FastAPI):
     print(f"MinIO 控制台地址: {settings.minio_console_url}")
     if settings.document_processing_mode == "worker":
         print("文档处理模式: worker，请单独启动文档处理 Worker")
+    print(f"Qdrant 地址: {settings.qdrant_url}")
+    if qdrant_ready:
+        print("Qdrant 状态: 已连接，可进行向量写入与检索")
+    else:
+        print("Qdrant 状态: 未连接，后端可正常运行，但向量检索暂不可用")
     yield
 
 

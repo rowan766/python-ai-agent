@@ -113,14 +113,25 @@ pnpm preview
 
 ## 前后端联调启动
 
+当前推荐的开发方式是：
+
+- 前端本地运行
+- Python 后端本地运行
+- PostgreSQL / Redis / MinIO / Qdrant / document-worker 运行在 Docker 里
+
 推荐按下面顺序启动整个项目：
 
 1. 启动 Docker 基础服务
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent
-docker compose up -d postgres redis minio
+docker compose up -d postgres redis minio qdrant document-worker
 ```
+
+这条命令的作用：
+
+- 启动数据库、缓存、对象存储、向量库
+- 启动独立文档处理 Worker
 
 2. 启动后端
 
@@ -129,12 +140,22 @@ cd D:\study_python_20260404\python-ai-agent\backend
 .venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
+这条命令的作用：
+
+- 启动本地 Python 后端
+- 方便直接调试 FastAPI 代码
+
 3. 启动前端
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\frontend
 pnpm dev
 ```
+
+这条命令的作用：
+
+- 启动本地前端开发服务器
+- 代理 `/api` 到本地 `3101`
 
 启动完成后可访问：
 

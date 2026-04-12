@@ -1,4 +1,58 @@
 services:
+  backend:
+    build:
+      context: ./backend
+    container_name: fastapi-admin-backend
+    ports:
+      - "3101:3101"
+    env_file:
+      - ./backend/.env
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 3101
+      DATABASE_URL: postgresql+psycopg://admin:password123@postgres:5432/admin_system
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_CONSOLE_URL: http://127.0.0.1:9001
+      QDRANT_URL: http://qdrant:6333
+      DOCUMENT_PROCESSING_MODE: worker
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 3101
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
+  document-worker:
+    build:
+      context: ./backend
+    container_name: fastapi-admin-document-worker
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://admin:password123@postgres:5432/admin_system
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_CONSOLE_URL: http://127.0.0.1:9001
+      QDRANT_URL: http://qdrant:6333
+      DOCUMENT_PROCESSING_MODE: worker
+    command: python -m app.workers.document_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
   # 向量数据库 - 存储文档的语义向量，用于 RAG 检索
   qdrant:
     image: qdrant/qdrant:latest

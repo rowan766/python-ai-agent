@@ -13,6 +13,7 @@ dependencies = [
   "pypdf>=5.4.0",
   "psycopg[binary]>=3.2.9",
   "python-multipart>=0.0.20",
+  "qdrant-client>=1.17.1",
   "rapidocr-onnxruntime>=1.4.4",
   "redis>=5.2.1",
   "scalar-fastapi>=1.8.2",

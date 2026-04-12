@@ -14,6 +14,7 @@ from app.services.object_storage import (
     remove_file_from_minio,
     upload_file_to_minio,
 )
+from app.services.qdrant_vector_store import delete_document_vectors
 from app.services.serializers import serialize_document, serialize_file_record
 
 
@@ -149,7 +150,7 @@ def upload_files(
                 payload["documentId"] = document.id
                 payload["documentStatus"] = document.status
             response_items.append(payload)
-        return success_response(response_items, message="上传成功，文档已入队，等待 Worker 处理")
+        return success_response(response_items, message="上传成功，文档已入队，系统会自动处理")
     except Exception:
         db.rollback()
         _cleanup_uploaded_objects(uploaded_objects)
@@ -183,6 +184,9 @@ def download_file(file_id: int, db: DbSession) -> StreamingResponse:
 @router.delete("/file/{file_id}", summary="删除上传文件")
 def delete_uploaded_file(file_id: int, db: DbSession, _current_user: CurrentUser) -> dict:
     file_record = _get_file_or_404(db, file_id)
+    document = db.scalar(select(Document).where(Document.file_id == file_id))
+    if document:
+        delete_document_vectors(document.id)
     remove_file_from_minio(file_record.file_name)
     db.delete(file_record)
     db.commit()

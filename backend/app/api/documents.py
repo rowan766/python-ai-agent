@@ -7,10 +7,13 @@ from app.core.http import paginated_response, success_response
 from app.models import Document, DocumentChunk, DocumentTask
 from app.schemas import DocumentReprocessRequest
 from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_task, get_document_queue_length
+from app.services.qdrant_vector_store import QdrantUnavailableError, search_document_chunks
 from app.services.serializers import serialize_document, serialize_document_chunk, serialize_document_task
+from app.core.config import get_settings
 
 
 router = APIRouter(prefix="/document", tags=["文档处理"])
+settings = get_settings()
 
 
 def _document_query():
@@ -80,14 +83,62 @@ def get_document_task_list(
 
 
 @router.get("/queue/status", summary="获取文档队列状态")
-def get_document_queue_status(_current_user: CurrentUser) -> dict:
+def get_document_queue_status(db: DbSession, _current_user: CurrentUser) -> dict:
+    processing_count = (
+        db.scalar(select(func.count()).select_from(DocumentTask).where(DocumentTask.status == "processing"))
+        or 0
+    )
     return success_response(
         {
             "queueName": DOCUMENT_QUEUE_NAME,
-            "processingMode": "worker",
+            "processingMode": settings.document_processing_mode,
             "pendingCount": get_document_queue_length(DOCUMENT_QUEUE_NAME),
+            "processingCount": processing_count,
         }
     )
+
+
+@router.get("/search", summary="搜索文档切片")
+def search_documents(
+    query: str,
+    db: DbSession,
+    _current_user: CurrentUser,
+    limit: int = Query(default=5, ge=1, le=20),
+) -> dict:
+    keyword = query.strip()
+    if not keyword:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="检索关键词不能为空")
+
+    try:
+        hits = search_document_chunks(keyword, limit=limit)
+    except QdrantUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    if not hits:
+        return success_response([])
+
+    chunk_ids = [int(item["chunkId"]) for item in hits if item.get("chunkId") is not None]
+    chunks = db.scalars(
+        select(DocumentChunk)
+        .options(selectinload(DocumentChunk.document))
+        .where(DocumentChunk.id.in_(chunk_ids))
+    ).all()
+    chunk_map = {chunk.id: chunk for chunk in chunks}
+
+    results: list[dict] = []
+    for hit in hits:
+        chunk_id = int(hit["chunkId"])
+        chunk = chunk_map.get(chunk_id)
+        results.append(
+            {
+                "score": hit["score"],
+                "chunkId": chunk_id,
+                "documentId": hit["documentId"],
+                "chunkIndex": hit["chunkIndex"],
+                "content": hit["content"],
+                "document": serialize_document(chunk.document, include_file=False) if chunk and chunk.document else None,
+            }
+        )
+    return success_response(results)
 
 
 @router.get("/{document_id}", summary="获取文档详情")
@@ -157,5 +208,5 @@ def reprocess_document(
             "document": serialize_document(refreshed, include_tasks=True),
             "task": serialize_document_task(task),
         },
-        message="文档已重新入队，等待 Worker 处理",
+        message="文档已重新入队，系统会自动继续处理",
     )

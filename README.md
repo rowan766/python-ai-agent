@@ -81,6 +81,10 @@ python-ai-agent/
 
 当前 `docker-compose.yml` 已包含：
 
+- `backend`
+  FastAPI 后端服务
+- `document-worker`
+  常驻文档处理 Worker，负责自动消费队列
 - `postgres`
   当前后台管理系统默认使用
 - `redis`
@@ -90,17 +94,56 @@ python-ai-agent/
 - `qdrant`
   已准备好，后续用于 RAG 向量检索
 
-启动全部基础服务：
+启动全部服务：
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent
 docker compose up -d
 ```
 
-如果你当前只想先跑后台管理系统，建议至少启动这三个：
+如果你当前只想先跑基础依赖，也可以只启动这四个：
 
 ```powershell
-docker compose up -d postgres redis minio
+docker compose up -d postgres redis minio qdrant
+```
+
+## 一键脚本
+
+项目根目录现在提供了一个 Windows PowerShell 启动脚本：
+
+- [start-dev.ps1](D:/study_python_20260404/python-ai-agent/start-dev.ps1)
+
+推荐命令：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -Mode local
+```
+
+这条命令的作用：
+
+- 启动 `postgres`
+- 启动 `redis`
+- 启动 `minio`
+- 启动 `qdrant`
+- 启动 `document-worker`
+- 另外打开一个本地后端窗口执行 `uvicorn`
+- 另外打开一个前端开发窗口执行 `pnpm dev`
+
+如果你要把后端也放进容器里，使用：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -Mode compose
+```
+
+这条命令的作用：
+
+- 启动 `postgres / redis / minio / qdrant / backend / document-worker`
+- 另外打开一个窗口运行前端 `pnpm dev`
+
+如果你只想看脚本会执行什么命令，不真正启动，可以加：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -Mode compose -DryRun
 ```
 
 ## PostgreSQL 配置
@@ -125,6 +168,7 @@ docker compose up -d postgres redis minio
 - Redis：`redis://127.0.0.1:6379/0`
 - MinIO API：`http://127.0.0.1:9000`
 - MinIO Console：`http://127.0.0.1:9001`
+- Qdrant：`http://127.0.0.1:6333`
 - MinIO 用户名：`minioadmin`
 - MinIO 密码：`minioadmin`
 - MinIO Bucket：`admin-system`
@@ -137,7 +181,7 @@ docker compose up -d postgres redis minio
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
 uv venv .venv-fastapi
-uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous minio pillow pydantic-settings pypdf psycopg[binary] python-multipart rapidocr-onnxruntime redis scalar-fastapi sqlalchemy "uvicorn[standard]"
+uv pip install --python .venv-fastapi\Scripts\python.exe bcrypt fastapi itsdangerous minio pillow pydantic-settings pypdf psycopg[binary] python-multipart qdrant-client rapidocr-onnxruntime redis scalar-fastapi sqlalchemy "uvicorn[standard]"
 ```
 
 启动后端：
@@ -194,28 +238,54 @@ pnpm dev
 
 ## 一次看懂怎么启动
 
-推荐开 3 个终端，按这个顺序启动。
+你当前推荐的开发方式是：
 
-### 终端 1：启动基础服务
+- `frontend` 本地跑
+- `Python backend` 本地跑
+- `postgres / redis / minio / qdrant / document-worker` 跑在容器里
+
+这样既方便你改前后端代码，又能保持文档处理链路和基础依赖运行形态稳定。
+
+### 方式一：推荐的本地开发模式
+
+#### 终端 1：启动基础依赖与独立 Worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent
-docker compose up -d postgres redis minio
+docker compose up -d postgres redis minio qdrant document-worker
 ```
 
-### 终端 2：启动后端
+这条命令的作用：
+
+- 启动 Docker 里的 `postgres`
+- 启动 Docker 里的 `redis`
+- 启动 Docker 里的 `minio`
+- 启动 Docker 里的 `qdrant`
+- 启动 Docker 里的 `document-worker`
+
+#### 终端 2：启动本地后端
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
 .venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
-### 终端 3：启动前端
+这条命令的作用：
+
+- 启动本地 FastAPI API 服务
+- 方便直接调试 Python 后端代码
+
+#### 终端 3：启动前端
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\frontend
 pnpm dev
 ```
+
+这条命令的作用：
+
+- 启动前端开发服务器
+- 本地访问地址通常是 `http://127.0.0.1:5173`
 
 启动完成后访问：
 
@@ -228,12 +298,34 @@ pnpm dev
 - 后台管理员：`admin / 123456`
 - MinIO：`minioadmin / minioadmin`
 
-### 终端 4：启动文档处理 Worker
+### 方式二：整套容器模式
+
+如果你后面准备把前后端也一起容器化，可以直接使用：
+
+#### 终端 1：启动后端与基础服务
 
 ```powershell
-cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m app.workers.document_worker
+cd D:\study_python_20260404\python-ai-agent
+docker compose up -d
 ```
+
+这条命令的作用：
+
+- 启动 Docker 里的 `backend`
+- 启动 Docker 里的 `document-worker`
+- 启动 Docker 里的 `postgres / redis / minio / qdrant`
+
+#### 终端 2：启动前端
+
+```powershell
+cd D:\study_python_20260404\python-ai-agent\frontend
+pnpm dev
+```
+
+这条命令的作用：
+
+- 启动前端开发服务器
+- 代理 `/api` 到本地后端 `3101`
 
 ## 快速启动顺序
 
@@ -243,8 +335,12 @@ cd D:\study_python_20260404\python-ai-agent\backend
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent
-docker compose up -d postgres redis minio
+docker compose up -d postgres redis minio qdrant document-worker
 ```
+
+作用：
+
+- 提供 PostgreSQL、Redis、MinIO、Qdrant、独立文档 Worker
 
 2. 启动后端
 
@@ -253,6 +349,10 @@ cd D:\study_python_20260404\python-ai-agent\backend
 .venv-fastapi\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
 ```
 
+作用：
+
+- 提供登录、菜单、上传、文档处理接口
+
 3. 启动前端
 
 ```powershell
@@ -260,18 +360,18 @@ cd D:\study_python_20260404\python-ai-agent\frontend
 pnpm dev
 ```
 
-4. 浏览器访问
+作用：
+
+- 提供管理后台页面
+
+默认情况下，不再推荐本地手动启动 `python -m app.workers.document_worker`。
+当前更推荐让 `document-worker` 跟数据库、Redis、MinIO、Qdrant 一样跑在 Docker 里。
+
+5. 浏览器访问
 
 - 前端：`http://127.0.0.1:5173`
 - 文档：`http://127.0.0.1:3101/docs`
 - MinIO Console：`http://127.0.0.1:9001`
-
-5. 如果要处理文档
-
-```powershell
-cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m app.workers.document_worker
-```
 
 ## 当前上传方案
 
@@ -296,6 +396,8 @@ cd D:\study_python_20260404\python-ai-agent\backend
 - 扫描版 PDF OCR 回退处理
 - 自动切 chunk
 - chunk 元数据写入 PostgreSQL
+- chunk 自动写入 Qdrant
+- 已提供基础文档检索接口
 
 当前已提供的接口分组：
 
@@ -305,6 +407,7 @@ cd D:\study_python_20260404\python-ai-agent\backend
   - 文档任务列表
   - 文档队列状态
   - 文档切片列表
+  - 文档切片搜索
   - 重新处理文档
 
 当前说明：
@@ -313,15 +416,17 @@ cd D:\study_python_20260404\python-ai-agent\backend
 - PDF 已支持基础文本提取
 - 图片类文件已支持 OCR：`png / jpg / jpeg / bmp / gif / webp / tif / tiff`
 - 扫描版 PDF 会在“提取不到文本”时自动尝试 OCR
+- 文档处理成功后，chunk 会自动写入 Qdrant
+- 当前检索层已经可用，后面还可以继续升级为更强的 embedding 模型
 
-当前文档处理已经切成独立 worker 模式，Web API 只负责入队，不再在主线程里顺手处理任务。
+当前文档处理已经切成独立 worker 模式，Web API 只负责入队，不在主线程里直接做 OCR 或切片。
 
-所以如果你要让文档真正开始解析，需要单独启动 Worker：
+处理逻辑是：
 
-```powershell
-cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi\Scripts\python.exe -m app.workers.document_worker
-```
+- 上传文件后立即创建文档任务
+- 如果当前 worker 正在处理别的文档，新任务会自动排队
+- 如果当前没有任务，worker 会马上开始处理
+- 推荐让 `document-worker` 跟 `postgres / redis / minio / qdrant` 一起跑在 Docker 里
 
 ## 推荐演进路线
 

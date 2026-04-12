@@ -16,6 +16,7 @@ from app.core.database import SessionLocal
 from app.models import Document, DocumentChunk, DocumentTask, FileRecord
 from app.services.document_queue import pop_document_task
 from app.services.object_storage import get_minio_object
+from app.services.qdrant_vector_store import QdrantUnavailableError, delete_document_vectors, upsert_document_chunks
 
 
 settings = get_settings()
@@ -198,6 +199,7 @@ def process_document_task(task_id: int) -> bool:
             )
 
             db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
+            delete_document_vectors(document.id)
             for chunk in chunks:
                 db.add(
                     DocumentChunk(
@@ -219,6 +221,17 @@ def process_document_task(task_id: int) -> bool:
                         ),
                     )
                 )
+            db.commit()
+
+            stored_chunks = db.scalars(
+                select(DocumentChunk)
+                .where(DocumentChunk.document_id == document.id)
+                .order_by(DocumentChunk.chunk_index.asc())
+            ).all()
+            try:
+                upsert_document_chunks(document.id, stored_chunks)
+            except QdrantUnavailableError as exc:
+                print(f"文档 {document.id} 切片已入库，但向量写入跳过: {exc}")
 
             finished_at = datetime.utcnow()
             task.status = "success"
@@ -234,6 +247,7 @@ def process_document_task(task_id: int) -> bool:
         except Exception as exc:
             error_message = str(exc) or "文档处理失败"
             finished_at = datetime.utcnow()
+            delete_document_vectors(document.id)
             db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
             task.status = "failed"
             task.finished_at = finished_at

@@ -1,12 +1,14 @@
 import json
+import logging
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
+from app.core.audit import AuditAction, log_audit
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import paginated_response, success_response
 from app.models import Document, DocumentChunk, DocumentQaMessage, DocumentQaSession, DocumentTask
@@ -44,6 +46,7 @@ from app.services.qdrant_vector_store import delete_document_vectors
 
 router = APIRouter(prefix="/document", tags=["文档处理"])
 settings = get_settings()
+logger = logging.getLogger("app.api.documents")
 
 
 def _document_query():
@@ -170,14 +173,18 @@ def get_document_list(
         filters.append(Document.title.ilike(keyword_value))
 
     total = db.scalar(select(func.count()).select_from(Document).where(*filters)) or 0
+
+    # 列表查询只加载必要的关联，不加载 tasks 和 chunks
     documents = db.scalars(
-        _document_query()
+        select(Document)
+        .options(selectinload(Document.file_record))
         .where(*filters)
         .order_by(Document.id.desc())
         .offset((page - 1) * pageSize)
         .limit(pageSize)
     ).all()
-    return paginated_response([serialize_document(item) for item in documents], total, page, pageSize)
+
+    return paginated_response([serialize_document(item, include_tasks=False) for item in documents], total, page, pageSize)
 
 
 @router.get(
@@ -436,20 +443,106 @@ def delete_document(
     document_id: Annotated[int, Path(title="文档 ID", description="要删除的文档主键 ID")],
     db: DbSession,
     current_user: CurrentUser,
+    request: Request,
 ) -> dict:
     document = _get_document_or_404(db, document_id, current_user)
     if document.status == "processing":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="文档正在处理中，请稍后再删除")
 
     file_record = document.file_record
-    if file_record:
-        remove_file_from_minio(file_record.file_name)
+    client_ip = request.client.host if request.client else None
 
-    delete_document_vectors(document.id)
-    db.delete(document)
-    if file_record:
-        db.delete(file_record)
-    db.commit()
+    # 先删除外部资源（向量和 MinIO 文件）
+    try:
+        logger.info(
+            "开始删除文档外部资源: document_id=%d, user_id=%d, title=%s",
+            document_id,
+            current_user.id,
+            document.title,
+        )
+
+        # 删除向量数据
+        delete_document_vectors(document.id)
+        logger.info("文档向量已删除: document_id=%d", document_id)
+
+        # 删除 MinIO 文件
+        if file_record:
+            remove_file_from_minio(file_record.file_name)
+            logger.info("MinIO 文件已删除: document_id=%d, file_name=%s", document_id, file_record.file_name)
+
+    except Exception as e:
+        logger.error(
+            "删除文档外部资源失败: document_id=%d, error=%s",
+            document_id,
+            str(e),
+            exc_info=True,
+        )
+        # 记录审计日志
+        log_audit(
+            action=AuditAction.DOCUMENT_DELETE,
+            user_id=current_user.id,
+            username=current_user.username,
+            resource_type="document",
+            resource_id=document_id,
+            ip_address=client_ip,
+            success=False,
+            details={"title": document.title, "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除文件失败: {str(e)}，请稍后重试",
+        )
+
+    # 外部资源删除成功后，再删除数据库记录
+    try:
+        db.delete(document)
+        if file_record:
+            db.delete(file_record)
+        db.commit()
+
+        logger.info(
+            "文档删除成功: document_id=%d, user_id=%d, title=%s",
+            document_id,
+            current_user.id,
+            document.title,
+        )
+
+        # 记录审计日志
+        log_audit(
+            action=AuditAction.DOCUMENT_DELETE,
+            user_id=current_user.id,
+            username=current_user.username,
+            resource_type="document",
+            resource_id=document_id,
+            ip_address=client_ip,
+            success=True,
+            details={"title": document.title, "file_name": file_record.file_name if file_record else None},
+        )
+
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            "删除文档数据库记录失败: document_id=%d, error=%s",
+            document_id,
+            str(e),
+            exc_info=True,
+        )
+        # 记录审计日志
+        log_audit(
+            action=AuditAction.DOCUMENT_DELETE,
+            user_id=current_user.id,
+            username=current_user.username,
+            resource_type="document",
+            resource_id=document_id,
+            ip_address=client_ip,
+            success=False,
+            details={"title": document.title, "error": str(e)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="删除文档记录失败，请稍后重试",
+        )
+
     return success_response(message="文档已删除，相关切片、向量和文件记录已同步清理")
 
 

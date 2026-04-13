@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     app_name: str = "FastAPI Admin Backend"
     app_host: str = "0.0.0.0"
     app_port: int = 3101
-    secret_key: str = "change-me-in-production"
+    secret_key: str = Field(min_length=32, description="JWT 签名密钥，生产环境必须修改")
     database_url: str = "sqlite:///./app/data/admin_system.db"
     access_token_ttl_seconds: int = 60 * 60 * 24
     captcha_ttl_seconds: int = 60 * 5
@@ -91,6 +91,29 @@ class Settings(BaseSettings):
     @property
     def llm_enabled(self) -> bool:
         return bool((self.llm_api_key or "").strip())
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if v == "change-me-in-production":
+            raise ValueError(
+                "SECRET_KEY 不能使用默认值，请在 .env 文件中设置一个至少 32 位的随机字符串"
+            )
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY 长度必须至少为 32 个字符")
+        return v
+
+    @model_validator(mode="after")
+    def validate_settings(self):
+        # 验证 worker 模式必须配置 Redis
+        if self.document_processing_mode == "worker" and not self.redis_url:
+            raise ValueError("文档处理模式为 worker 时必须配置 REDIS_URL")
+
+        # 验证数据库 URL
+        if not self.database_url:
+            raise ValueError("DATABASE_URL 不能为空")
+
+        return self
 
 
 @lru_cache

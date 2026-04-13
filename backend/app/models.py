@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -8,15 +8,15 @@ from app.core.database import Base
 
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
+        DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
+        DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 
@@ -102,6 +102,12 @@ class Permission(Base, TimestampMixin):
 
 class User(Base, TimestampMixin):
     __tablename__ = "sys_user"
+    __table_args__ = (
+        Index("idx_user_username", "username"),
+        Index("idx_user_email", "email"),
+        Index("idx_user_department_id", "department_id"),
+        Index("idx_user_status", "status"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(50), unique=True)
@@ -115,7 +121,7 @@ class User(Base, TimestampMixin):
     department_id: Mapped[int | None] = mapped_column(ForeignKey("sys_department.id", ondelete="SET NULL"))
     gender: Mapped[int] = mapped_column(default=0)
     status: Mapped[int] = mapped_column(default=1)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     department: Mapped[Department | None] = relationship(back_populates="users")
     user_roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -239,6 +245,11 @@ class DictData(Base, TimestampMixin):
 
 class Document(Base, TimestampMixin):
     __tablename__ = "sys_document"
+    __table_args__ = (
+        Index("idx_document_user_id", "user_id"),
+        Index("idx_document_status", "status"),
+        Index("idx_document_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
@@ -252,7 +263,7 @@ class Document(Base, TimestampMixin):
     text_length: Mapped[int] = mapped_column(Integer, default=0)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="documents")
     file_record: Mapped[FileRecord] = relationship(back_populates="document")
@@ -262,6 +273,11 @@ class Document(Base, TimestampMixin):
 
 class DocumentTask(Base, TimestampMixin):
     __tablename__ = "sys_document_task"
+    __table_args__ = (
+        Index("idx_document_task_document_id", "document_id"),
+        Index("idx_document_task_status", "status"),
+        Index("idx_document_task_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("sys_document.id", ondelete="CASCADE"))
@@ -269,8 +285,8 @@ class DocumentTask(Base, TimestampMixin):
     queue_name: Mapped[str] = mapped_column(String(50), default="document-processing")
     status: Mapped[str] = mapped_column(String(20), default="pending")
     attempts: Mapped[int] = mapped_column(Integer, default=0)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
 
     document: Mapped[Document] = relationship(back_populates="tasks")
@@ -323,6 +339,6 @@ class DocumentQaMessage(Base, TimestampMixin):
     answer_model: Mapped[str | None] = mapped_column(String(100))
     sources_json: Mapped[str | None] = mapped_column(Text)
     suggestions_json: Mapped[str | None] = mapped_column(Text)
-    message_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+    message_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     session: Mapped[DocumentQaSession] = relationship(back_populates="messages")

@@ -7,6 +7,8 @@ from app.models import (
     DictData,
     DictType,
     Document,
+    DocumentQaMessage,
+    DocumentQaSession,
     DocumentChunk,
     DocumentTask,
     FileRecord,
@@ -247,6 +249,40 @@ def serialize_document(
             for chunk in sorted(document.chunks, key=lambda item: item.chunk_index)
         ]
     return payload
+
+
+def _safe_parse_json_list(raw: str | None) -> list[Any]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def serialize_document_qa_message(message: DocumentQaMessage) -> dict[str, Any]:
+    return {
+        "id": message.id,
+        "role": message.role,
+        "content": message.content,
+        "timestamp": format_datetime(message.message_ts) or format_datetime(message.created_at),
+        "answerMode": message.answer_mode,
+        "answerModel": message.answer_model,
+        "sources": _safe_parse_json_list(message.sources_json),
+        "suggestions": _safe_parse_json_list(message.suggestions_json),
+    }
+
+
+def serialize_document_qa_session(session: DocumentQaSession) -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "title": session.title,
+        "createdAt": format_datetime(session.created_at),
+        "updatedAt": format_datetime(session.updated_at),
+        "docIds": _safe_parse_json_list(session.document_ids_json),
+        "messages": [serialize_document_qa_message(message) for message in session.messages],
+    }
 
 
 def build_tree(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

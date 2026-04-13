@@ -217,8 +217,8 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ChatDotRound,
   Clock,
@@ -234,7 +234,17 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
-import { askDocumentQuestion, getDocumentList } from '../../api/document'
+import { API_BASE_URL } from '../../utils/api-base-url'
+import {
+  askDocumentQuestion,
+  createDocumentQaSession,
+  deleteDocumentQaMessage,
+  deleteDocumentQaSession,
+  getDocumentList,
+  getDocumentQaSessions,
+  syncDocumentQaSession,
+  updateDocumentQaSession,
+} from '../../api/document'
 
 // ---- Markdown 配置 ----
 marked.setOptions({
@@ -243,10 +253,6 @@ marked.setOptions({
 })
 
 // ---- Constants ----
-const STORAGE_KEY = 'doc_qa_sessions'
-const MAX_SESSIONS = 30
-
-// ---- State ----
 let uidCounter = 0
 const makeUid = () => `msg-${Date.now()}-${++uidCounter}`
 
@@ -260,88 +266,167 @@ const messagesRef = ref(null)
 const inputRef = ref(null)
 const previewVisible = ref(false)
 const activeSource = ref(null)
+let lastExitPersistKey = ''
 
-// ---- Session management (localStorage persistence) ----
-const currentSessionId = ref('')
+// ---- Session management (database persistence) ----
+const currentSessionId = ref(null)
 const chatSessions = ref([])
 
-// Sorted sessions by updatedAt desc
-const sortedSessions = computed(() => {
-  return [...chatSessions.value].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+const toMillis = (value) => {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? 0 : time
+}
+
+const normalizeMessage = (message = {}) => ({
+  id: message.id ?? null,
+  uid: makeUid(),
+  role: message.role,
+  content: message.content || '',
+  timestamp: message.timestamp || message.createdAt || Date.now(),
+  answerMode: message.answerMode || '',
+  answerModel: message.answerModel || '',
+  sources: Array.isArray(message.sources) ? message.sources : [],
+  suggestions: Array.isArray(message.suggestions) ? message.suggestions : [],
+  _sourcesExpanded: false,
 })
 
-const loadSessions = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      chatSessions.value = Array.isArray(parsed) ? parsed : []
-    }
-  } catch { /* ignore */ }
+const normalizeSession = (session = {}) => ({
+  id: session.id,
+  title: session.title || '',
+  messages: Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [],
+  createdAt: session.createdAt || '',
+  updatedAt: session.updatedAt || '',
+  docIds: Array.isArray(session.docIds)
+    ? session.docIds.map(item => Number(item)).filter(item => Number.isInteger(item) && item > 0)
+    : [],
+})
+
+const sortedSessions = computed(() => {
+  return [...chatSessions.value].sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt))
+})
+
+const applyCurrentSession = (session) => {
+  currentSessionId.value = session?.id ?? null
+  messages.value = Array.isArray(session?.messages) ? session.messages.map(normalizeMessage) : []
+  selectedDocIds.value = Array.isArray(session?.docIds) ? [...session.docIds] : []
 }
 
-const saveSessions = () => {
-  try {
-    // Only keep latest N sessions
-    const trimmed = sortedSessions.value.slice(0, MAX_SESSIONS)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
-    chatSessions.value = trimmed
-  } catch { /* ignore */ }
-}
-
-const createSession = () => {
-  const id = `sess-${Date.now()}`
-  return { id, title: '', messages: [], createdAt: Date.now(), updatedAt: Date.now(), docIds: [...selectedDocIds.value] }
-}
-
-const saveCurrentSession = () => {
-  const idx = chatSessions.value.findIndex(s => s.id === currentSessionId.value)
-  const sessionData = {
-    id: currentSessionId.value,
-    title: getSessionTitle(),
-    messages: messages.value.map(m => ({
-      role: m.role,
-      content: m.content,
-      timestamp: m.timestamp,
-      answerMode: m.answerMode || null,
-      answerModel: m.answerModel || null,
-      sources: m.sources || [],
-      suggestions: m.suggestions || [],
-    })),
-    createdAt: currentSessionCreatedAt.value,
-    updatedAt: Date.now(),
-    docIds: [...selectedDocIds.value],
-  }
-
+const upsertSession = (session) => {
+  const normalized = normalizeSession(session)
+  const idx = chatSessions.value.findIndex(item => item.id === normalized.id)
   if (idx >= 0) {
-    chatSessions.value[idx] = sessionData
+    chatSessions.value[idx] = normalized
   } else {
-    chatSessions.value.push(sessionData)
+    chatSessions.value.push(normalized)
   }
-  saveSessions()
+  return normalized
 }
 
-let currentSessionCreatedAt = Date.now()
+const serializeMessages = () => {
+  return messages.value.map(msg => ({
+    role: msg.role,
+    content: msg.content,
+    timestamp: msg.timestamp || null,
+    answerMode: msg.answerMode || null,
+    answerModel: msg.answerModel || null,
+    sources: msg.sources || [],
+    suggestions: msg.suggestions || [],
+  }))
+}
 
-const switchSession = (id) => {
-  // Save current first
-  if (currentSessionId.value && messages.value.length) {
-    saveCurrentSession()
+const buildSessionPayload = () => ({
+  title: getSessionTitle(),
+  docIds: [...selectedDocIds.value],
+  messages: serializeMessages(),
+})
+
+const loadSessions = async () => {
+  const res = await getDocumentQaSessions()
+  const payload = res?.data ?? res ?? []
+  chatSessions.value = Array.isArray(payload) ? payload.map(normalizeSession) : []
+}
+
+const ensureCurrentSession = async () => {
+  if (currentSessionId.value) return currentSessionId.value
+  const res = await createDocumentQaSession({ docIds: selectedDocIds.value })
+  const session = res?.data ?? res ?? null
+  if (!session?.id) {
+    throw new Error('创建对话失败')
+  }
+  const normalized = upsertSession(session)
+  applyCurrentSession(normalized)
+  return normalized.id
+}
+
+const saveCurrentSession = async () => {
+  if (!currentSessionId.value && !messages.value.length) return
+  const sessionId = await ensureCurrentSession()
+  const payload = buildSessionPayload()
+  const res = messages.value.length
+    ? await syncDocumentQaSession(sessionId, payload)
+    : await updateDocumentQaSession(sessionId, { title: payload.title, docIds: payload.docIds })
+
+  const session = res?.data ?? res ?? null
+  if (!session?.id) return
+  const normalized = upsertSession(session)
+  if (currentSessionId.value === normalized.id) {
+    applyCurrentSession(normalized)
+  }
+}
+
+const persistCurrentSessionOnPageExit = () => {
+  if (!currentSessionId.value) return
+
+  const token = localStorage.getItem('token')
+  if (!token) return
+
+  const payload = buildSessionPayload()
+  const hasMessages = payload.messages.length > 0
+  const requestUrl = hasMessages
+    ? `${API_BASE_URL}/document/qa/sessions/${currentSessionId.value}/sync`
+    : `${API_BASE_URL}/document/qa/sessions/${currentSessionId.value}`
+  const requestBody = JSON.stringify(
+    hasMessages
+      ? payload
+      : { title: payload.title, docIds: payload.docIds },
+  )
+  const persistKey = `${currentSessionId.value}:${requestBody}`
+  if (persistKey === lastExitPersistKey) return
+  lastExitPersistKey = persistKey
+
+  void fetch(requestUrl, {
+    method: hasMessages ? 'PUT' : 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: requestBody,
+    keepalive: true,
+  }).catch(() => {})
+}
+
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') {
+    persistCurrentSessionOnPageExit()
+  }
+}
+
+const handlePageHide = () => {
+  persistCurrentSessionOnPageExit()
+}
+
+const switchSession = async (id, options = {}) => {
+  const { skipSave = false } = options
+  if (!skipSave) {
+    await saveCurrentSession()
   }
 
-  const session = chatSessions.value.find(s => s.id === id)
+  const session = chatSessions.value.find(item => item.id === id)
   if (!session) return
 
-  currentSessionId.value = id
-  currentSessionCreatedAt = session.createdAt || Date.now()
-  messages.value = (session.messages || []).map(m => ({
-    ...m,
-    uid: makeUid(),
-    _sourcesExpanded: false,
-  }))
-  if (session.docIds !== undefined) {
-    selectedDocIds.value = [...(Array.isArray(session.docIds) ? session.docIds : [])]
-  }
+  applyCurrentSession(session)
+  await scrollToBottom()
 }
 
 const deleteSession = async (id) => {
@@ -353,22 +438,26 @@ const deleteSession = async (id) => {
     })
   } catch { return }
 
-  chatSessions.value = chatSessions.value.filter(s => s.id !== id)
-  saveSessions()
+  await deleteDocumentQaSession(id)
+  chatSessions.value = chatSessions.value.filter(session => session.id !== id)
 
   if (currentSessionId.value === id) {
-    handleNewChat()
+    const nextSession = sortedSessions.value[0]
+    if (nextSession) {
+      await switchSession(nextSession.id, { skipSave: true })
+    } else {
+      currentSessionId.value = null
+      messages.value = []
+      await scrollToBottom()
+    }
   }
 }
 
-const handleNewChat = () => {
-  if (currentSessionId.value && messages.value.length) {
-    saveCurrentSession()
-  }
-  const sess = createSession()
-  currentSessionId.value = sess.id
-  currentSessionCreatedAt = sess.createdAt
+const handleNewChat = async () => {
+  await saveCurrentSession()
+  currentSessionId.value = null
   messages.value = []
+  activeSource.value = null
 }
 
 const getSessionTitle = () => {
@@ -391,7 +480,16 @@ const deleteMessage = async (idx) => {
     })
   } catch { return }
 
-  // If deleting user message, also remove its assistant response
+  if (currentSessionId.value && msg?.id) {
+    const res = await deleteDocumentQaMessage(currentSessionId.value, msg.id)
+    const session = res?.data ?? res ?? null
+    if (session?.id) {
+      const normalized = upsertSession(session)
+      applyCurrentSession(normalized)
+    }
+    return
+  }
+
   if (msg.role === 'user') {
     const nextIdx = idx + 1
     if (nextIdx < messages.value.length && messages.value[nextIdx].role === 'assistant') {
@@ -399,7 +497,9 @@ const deleteMessage = async (idx) => {
     }
   }
   messages.value.splice(idx, 1)
-  saveCurrentSession()
+  if (currentSessionId.value) {
+    await saveCurrentSession()
+  }
 }
 
 // ---- UI helpers ----
@@ -497,11 +597,11 @@ const handleSubmit = async () => {
   const text = inputText.value.trim()
   if (!text || loading.value) return
 
-  // Auto-create a session if none exists
-  if (!currentSessionId.value) {
-    const sess = createSession()
-    currentSessionId.value = sess.id
-    currentSessionCreatedAt = sess.createdAt
+  try {
+    await ensureCurrentSession()
+  } catch {
+    ElMessage.error('创建对话失败，请稍后重试')
+    return
   }
 
   // Append user message
@@ -510,6 +610,12 @@ const handleSubmit = async () => {
 
   inputText.value = ''
   autoResizeTextarea()
+
+  try {
+    await saveCurrentSession()
+  } catch {
+    ElMessage.error('对话保存失败，请稍后重试')
+  }
 
   // Append placeholder assistant message
   const assistMsg = {
@@ -552,19 +658,29 @@ const handleSubmit = async () => {
   } finally {
     loading.value = false
     await scrollToBottom()
-    // Persist after each round
-    saveCurrentSession()
+    try {
+      await saveCurrentSession()
+    } catch {
+      ElMessage.error('对话保存失败，请稍后重试')
+    }
   }
 }
 
 // ---- Lifecycle ----
-onMounted(() => {
+onMounted(async () => {
   fetchDocuments()
-  loadSessions()
-  // Restore last session or start fresh
+  await loadSessions()
   if (sortedSessions.value.length > 0) {
-    switchSession(sortedSessions.value[0].id)
+    await switchSession(sortedSessions.value[0].id, { skipSave: true })
   }
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('pagehide', handlePageHide)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('pagehide', handlePageHide)
+  persistCurrentSessionOnPageExit()
 })
 </script>
 

@@ -137,14 +137,15 @@ docker compose up -d postgres redis minio qdrant document-worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+powershell -ExecutionPolicy Bypass -File .\start-backend.ps1
 ```
 
 这条命令的作用：
 
 - 启动本地 Python 后端
 - 方便直接调试 FastAPI 代码
-- 本地推荐固定使用 Python 3.11 虚拟环境，这样文档检索能启用正式 embedding
+- 固定使用 `backend/.venv-fastapi311`
+- 这是项目唯一保留的本地后端启动入口，这样可以避免起出多个解释器实例
 
 3. 启动前端
 

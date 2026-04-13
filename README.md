@@ -126,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -Mode local
 - 启动 `minio`
 - 启动 `qdrant`
 - 启动 `document-worker`
-- 另外打开一个本地后端窗口执行 `uvicorn`
+- 另外打开一个本地后端窗口执行 [backend/start-backend.ps1](D:/study_python_20260404/python-ai-agent/backend/start-backend.ps1)
 - 另外打开一个前端开发窗口执行 `pnpm dev`
 
 如果你要把后端也放进容器里，使用：
@@ -220,8 +220,14 @@ uv pip install --python .venv-fastapi311\Scripts\python.exe -r requirements.txt
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+powershell -ExecutionPolicy Bypass -File .\start-backend.ps1
 ```
+
+说明：
+
+- 本地后端现在只保留一个启动入口：[backend/start-backend.ps1](D:/study_python_20260404/python-ai-agent/backend/start-backend.ps1)
+- 该脚本固定使用 `backend/.venv-fastapi311`
+- 如果你从根目录运行 [start-dev.ps1](D:/study_python_20260404/python-ai-agent/start-dev.ps1)，它也会调用这一入口
 
 后端启动后：
 
@@ -299,7 +305,7 @@ docker compose up -d postgres redis minio qdrant document-worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+powershell -ExecutionPolicy Bypass -File .\start-backend.ps1
 ```
 
 这条命令的作用：
@@ -378,7 +384,7 @@ docker compose up -d postgres redis minio qdrant document-worker
 
 ```powershell
 cd D:\study_python_20260404\python-ai-agent\backend
-.venv-fastapi311\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload
+powershell -ExecutionPolicy Bypass -File .\start-backend.ps1
 ```
 
 作用：

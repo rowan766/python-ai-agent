@@ -1,17 +1,24 @@
+import json
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import paginated_response, success_response
-from app.models import Document, DocumentChunk, DocumentTask
+from app.models import Document, DocumentChunk, DocumentQaMessage, DocumentQaSession, DocumentTask
 from app.schemas import (
     ApiResponse,
     DocumentChunkItem,
     DocumentItem,
     DocumentQaData,
+    DocumentQaSessionCreateRequest,
+    DocumentQaSessionItem,
+    DocumentQaSessionSyncRequest,
+    DocumentQaSessionUpdateRequest,
     DocumentQaRequest,
     DocumentQueueStatusData,
     DocumentReprocessRequest,
@@ -25,7 +32,12 @@ from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_ta
 from app.services.object_storage import remove_file_from_minio
 from app.services.rag_answer import answer_question_from_hits
 from app.services.rag_retrieval import retrieve_document_chunks
-from app.services.serializers import serialize_document, serialize_document_chunk, serialize_document_task
+from app.services.serializers import (
+    serialize_document,
+    serialize_document_chunk,
+    serialize_document_qa_session,
+    serialize_document_task,
+)
 from app.core.config import get_settings
 from app.services.qdrant_vector_store import delete_document_vectors
 
@@ -43,6 +55,10 @@ def _document_query():
     )
 
 
+def _document_qa_session_query():
+    return select(DocumentQaSession).options(selectinload(DocumentQaSession.messages))
+
+
 def _get_document_or_404(db: DbSession, document_id: int, current_user) -> Document:
     statement = _document_query().where(Document.id == document_id)
     permission_clause = build_document_permission_clause(db, current_user)
@@ -52,6 +68,82 @@ def _get_document_or_404(db: DbSession, document_id: int, current_user) -> Docum
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文档不存在")
     return document
+
+
+def _get_document_qa_session_or_404(db: DbSession, session_id: int, current_user) -> DocumentQaSession:
+    session = db.scalar(
+        _document_qa_session_query().where(
+            DocumentQaSession.id == session_id,
+            DocumentQaSession.user_id == current_user.id,
+        )
+    )
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+    return session
+
+
+def _parse_message_timestamp(value: str | int | None) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value / 1000)
+        except (OverflowError, OSError, ValueError):
+            return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _sanitize_doc_ids(doc_ids: list[int] | None) -> list[int]:
+    if not doc_ids:
+        return []
+    values: list[int] = []
+    for item in doc_ids:
+        if isinstance(item, bool):
+            continue
+        try:
+            value = int(item)
+        except (TypeError, ValueError):
+            continue
+        if value > 0 and value not in values:
+            values.append(value)
+    return values
+
+
+def _build_session_title(messages: list[DocumentQaMessage], fallback: str | None = None) -> str:
+    for message in messages:
+        if message.role == "user" and message.content:
+            content = message.content.strip()
+            if content:
+                return f"{content[:30]}..." if len(content) > 30 else content
+    return (fallback or "").strip()
+
+
+def _replace_session_messages(session: DocumentQaSession, payload_messages) -> None:
+    session.messages.clear()
+    for item in payload_messages:
+        session.messages.append(
+            DocumentQaMessage(
+                role=item.role,
+                content=item.content,
+                answer_mode=item.answerMode,
+                answer_model=item.answerModel,
+                sources_json=json.dumps(jsonable_encoder(item.sources), ensure_ascii=False),
+                suggestions_json=json.dumps(jsonable_encoder(item.suggestions), ensure_ascii=False),
+                message_ts=_parse_message_timestamp(item.timestamp),
+            )
+        )
 
 
 @router.get(
@@ -162,6 +254,140 @@ def search_documents(
         document_id=documentId,
     )
     return success_response(hits)
+
+
+@router.get(
+    "/qa/sessions",
+    summary="获取问答会话列表",
+    response_model=ApiResponse[list[DocumentQaSessionItem]],
+)
+def get_document_qa_sessions(
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    sessions = db.scalars(
+        _document_qa_session_query()
+        .where(DocumentQaSession.user_id == current_user.id)
+        .order_by(DocumentQaSession.updated_at.desc(), DocumentQaSession.id.desc())
+    ).all()
+    return success_response([serialize_document_qa_session(session) for session in sessions])
+
+
+@router.post(
+    "/qa/sessions",
+    summary="创建问答会话",
+    response_model=ApiResponse[DocumentQaSessionItem],
+)
+def create_document_qa_session(
+    payload: DocumentQaSessionCreateRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    session = DocumentQaSession(
+        user_id=current_user.id,
+        document_ids_json=json.dumps(_sanitize_doc_ids(payload.docIds), ensure_ascii=False),
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    session = _get_document_qa_session_or_404(db, session.id, current_user)
+    return success_response(serialize_document_qa_session(session))
+
+
+@router.put(
+    "/qa/sessions/{session_id}",
+    summary="更新问答会话",
+    response_model=ApiResponse[DocumentQaSessionItem],
+)
+def update_document_qa_session(
+    session_id: Annotated[int, Path(title="会话 ID", description="要更新的聊天会话 ID")],
+    payload: DocumentQaSessionUpdateRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    session = _get_document_qa_session_or_404(db, session_id, current_user)
+    session.title = (payload.title or "").strip() or None
+    session.document_ids_json = json.dumps(_sanitize_doc_ids(payload.docIds), ensure_ascii=False)
+    db.commit()
+    db.refresh(session)
+    session = _get_document_qa_session_or_404(db, session.id, current_user)
+    return success_response(serialize_document_qa_session(session))
+
+
+@router.put(
+    "/qa/sessions/{session_id}/sync",
+    summary="同步问答会话消息",
+    response_model=ApiResponse[DocumentQaSessionItem],
+)
+def sync_document_qa_session(
+    session_id: Annotated[int, Path(title="会话 ID", description="要同步的聊天会话 ID")],
+    payload: DocumentQaSessionSyncRequest,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    session = _get_document_qa_session_or_404(db, session_id, current_user)
+    session.document_ids_json = json.dumps(_sanitize_doc_ids(payload.docIds), ensure_ascii=False)
+    _replace_session_messages(session, payload.messages)
+    session.title = _build_session_title(session.messages, fallback=payload.title) or None
+    db.commit()
+    db.refresh(session)
+    session = _get_document_qa_session_or_404(db, session.id, current_user)
+    return success_response(serialize_document_qa_session(session))
+
+
+@router.delete(
+    "/qa/sessions/{session_id}",
+    summary="删除问答会话",
+    response_model=ApiResponse[None],
+)
+def delete_document_qa_session(
+    session_id: Annotated[int, Path(title="会话 ID", description="要删除的聊天会话 ID")],
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    session = _get_document_qa_session_or_404(db, session_id, current_user)
+    db.delete(session)
+    db.commit()
+    return success_response(message="对话已删除")
+
+
+@router.delete(
+    "/qa/sessions/{session_id}/messages/{message_id}",
+    summary="删除问答消息",
+    response_model=ApiResponse[DocumentQaSessionItem],
+)
+def delete_document_qa_message(
+    session_id: Annotated[int, Path(title="会话 ID", description="所属聊天会话 ID")],
+    message_id: Annotated[int, Path(title="消息 ID", description="要删除的消息 ID")],
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    session = _get_document_qa_session_or_404(db, session_id, current_user)
+    messages = list(session.messages)
+    target_index = next((idx for idx, item in enumerate(messages) if item.id == message_id), -1)
+    if target_index < 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="消息不存在")
+
+    target = messages[target_index]
+    delete_items = [target]
+    if target.role == "user":
+        next_index = target_index + 1
+        if next_index < len(messages) and messages[next_index].role == "assistant":
+            delete_items.append(messages[next_index])
+
+    for item in delete_items:
+        db.delete(item)
+
+    db.flush()
+    refreshed_messages = db.scalars(
+        select(DocumentQaMessage)
+        .where(DocumentQaMessage.session_id == session.id)
+        .order_by(DocumentQaMessage.id.asc())
+    ).all()
+    session.title = _build_session_title(refreshed_messages) or None
+    db.commit()
+    session = _get_document_qa_session_or_404(db, session.id, current_user)
+    return success_response(serialize_document_qa_session(session), message="消息已删除")
 
 
 @router.get(

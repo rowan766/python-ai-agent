@@ -9,9 +9,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir = Join-Path $ProjectRoot "backend"
 $FrontendDir = Join-Path $ProjectRoot "frontend"
-$PreferredBackendPython = Join-Path $BackendDir ".venv-fastapi311\Scripts\python.exe"
-$FallbackBackendPython = Join-Path $BackendDir ".venv-fastapi\Scripts\python.exe"
-$BackendPython = if (Test-Path $PreferredBackendPython) { $PreferredBackendPython } else { $FallbackBackendPython }
+$BackendStartScript = Join-Path $BackendDir "start-backend.ps1"
 
 function Write-Step {
     param(
@@ -82,14 +80,14 @@ if ($Mode -eq "compose") {
 }
 else {
     Invoke-InCurrentWindow $ProjectRoot "docker compose up -d postgres redis minio qdrant document-worker" "启动 Docker 基础依赖与独立 Worker"
-    Start-InNewWindow $BackendDir "`"$BackendPython`" -m uvicorn app.main:app --host 0.0.0.0 --port 3101 --reload" "启动本地 FastAPI 后端"
+    Start-InNewWindow $BackendDir "powershell -ExecutionPolicy Bypass -File `"$BackendStartScript`"" "启动本地 FastAPI 后端"
     Start-InNewWindow $FrontendDir "pnpm dev" "启动前端开发服务"
 
     Write-Host ""
     Write-Host "本地开发模式已执行。" -ForegroundColor Green
     Write-Host "作用说明：" -ForegroundColor Yellow
     Write-Host "- docker compose up -d postgres redis minio qdrant document-worker: 启动数据库、缓存、对象存储、向量库、独立文档 Worker"
-    Write-Host "- $BackendPython -m uvicorn app.main:app: 启动本地后端 API（优先使用 Python 3.11 虚拟环境）"
+    Write-Host "- ${BackendStartScript}: 唯一的本地后端启动入口，固定使用 backend\\.venv-fastapi311"
     Write-Host "- pnpm dev: 启动前端开发服务器"
     Write-Host "访问地址：" -ForegroundColor Yellow
     Write-Host "- 前端: http://127.0.0.1:5173"

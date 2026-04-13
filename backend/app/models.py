@@ -121,6 +121,10 @@ class User(Base, TimestampMixin):
     user_roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     files: Mapped[list["FileRecord"]] = relationship(back_populates="user")
     documents: Mapped[list["Document"]] = relationship(back_populates="user")
+    document_qa_sessions: Mapped[list["DocumentQaSession"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserRole(Base):
@@ -290,3 +294,35 @@ class DocumentChunk(Base, TimestampMixin):
 
     document: Mapped[Document] = relationship(back_populates="chunks")
     task: Mapped[DocumentTask | None] = relationship(back_populates="chunks")
+
+
+class DocumentQaSession(Base, TimestampMixin):
+    __tablename__ = "sys_document_qa_session"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
+    title: Mapped[str | None] = mapped_column(String(255))
+    document_ids_json: Mapped[str | None] = mapped_column(Text)
+
+    user: Mapped[User] = relationship(back_populates="document_qa_sessions")
+    messages: Mapped[list["DocumentQaMessage"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="DocumentQaMessage.id.asc()",
+    )
+
+
+class DocumentQaMessage(Base, TimestampMixin):
+    __tablename__ = "sys_document_qa_message"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("sys_document_qa_session.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    answer_mode: Mapped[str | None] = mapped_column(String(50))
+    answer_model: Mapped[str | None] = mapped_column(String(100))
+    sources_json: Mapped[str | None] = mapped_column(Text)
+    suggestions_json: Mapped[str | None] = mapped_column(Text)
+    message_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=False))
+
+    session: Mapped[DocumentQaSession] = relationship(back_populates="messages")

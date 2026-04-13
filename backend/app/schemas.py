@@ -436,6 +436,51 @@ class DocumentQaData(BaseModel):
     suggestions: list[str] = Field(default_factory=list, title="追问建议", description="基于当前对话自动生成的 3 个追问建议")
 
 
+class DocumentQaMessageItem(BaseModel):
+    id: int = Field(title="消息 ID", description="聊天消息主键 ID")
+    role: str = Field(title="角色", description="消息角色: user 或 assistant")
+    content: str = Field(title="内容", description="消息文本内容")
+    timestamp: str | None = Field(default=None, title="消息时间", description="消息时间")
+    answerMode: str | None = Field(default=None, title="回答模式", description="助手消息的回答模式")
+    answerModel: str | None = Field(default=None, title="回答模型", description="助手消息使用的模型名称")
+    sources: list[DocumentQaSourceItem] = Field(default_factory=list, title="引用来源", description="助手消息引用来源")
+    suggestions: list[str] = Field(default_factory=list, title="追问建议", description="助手消息附带的追问建议")
+
+
+class DocumentQaSessionItem(BaseModel):
+    id: int = Field(title="会话 ID", description="聊天会话主键 ID")
+    title: str | None = Field(default=None, title="会话标题", description="会话标题")
+    createdAt: str | None = Field(default=None, title="创建时间", description="会话创建时间")
+    updatedAt: str | None = Field(default=None, title="更新时间", description="会话更新时间")
+    docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
+    messages: list[DocumentQaMessageItem] = Field(default_factory=list, title="消息列表", description="当前会话的全部消息")
+
+
+class DocumentQaSessionCreateRequest(BaseModel):
+    docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
+
+
+class DocumentQaSessionUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255, title="会话标题", description="更新后的会话标题")
+    docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
+
+
+class DocumentQaMessageCreateRequest(BaseModel):
+    role: str = Field(title="角色", description="消息角色: user 或 assistant")
+    content: str = Field(title="内容", description="消息文本内容")
+    timestamp: str | int | None = Field(default=None, title="消息时间", description="前端传入的消息时间")
+    answerMode: str | None = Field(default=None, max_length=50, title="回答模式", description="助手消息的回答模式")
+    answerModel: str | None = Field(default=None, max_length=100, title="回答模型", description="助手消息使用的模型名称")
+    sources: list[DocumentQaSourceItem] = Field(default_factory=list, title="引用来源", description="助手消息引用来源")
+    suggestions: list[str] = Field(default_factory=list, title="追问建议", description="助手消息附带的追问建议")
+
+
+class DocumentQaSessionSyncRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=255, title="会话标题", description="会话标题")
+    docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
+    messages: list[DocumentQaMessageCreateRequest] = Field(default_factory=list, title="消息列表", description="当前会话全部消息")
+
+
 class FollowUpRequest(BaseModel):
     question: str = Field(title="用户问题", description="用户最近一次提问的内容")
     answer: str = Field(title="助手回答", description="助手对最近问题的回答内容")

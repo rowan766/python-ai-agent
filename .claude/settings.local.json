@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv-fastapi311/Scripts/python.exe -c \"from app.services.rag_answer import RELEVANCE_THRESHOLD; print\\(f'当前阈值: {RELEVANCE_THRESHOLD}'\\)\")",
+      "Bash(grep -r \"cache\" backend/app/services/rag*.py backend/app/api/documents.py)",
+      "Bash(.venv-fastapi311/Scripts/python.exe -c \"from app.services.llm_service import generate_general_answer; print\\('generate_general_answer 函数已加载'\\)\")",
+      "Bash(.venv-fastapi311\\\\Scripts\\\\python.exe:*)"
+    ]
+  }
+}

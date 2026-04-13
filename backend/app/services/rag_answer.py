@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from app.core.config import get_settings
-from app.services.llm_service import LlmUnavailableError, generate_follow_up_suggestions, generate_rag_answer
+from app.services.llm_service import LlmUnavailableError, generate_follow_up_suggestions, generate_rag_answer, generate_general_answer
 
 
 logger = logging.getLogger("app.rag_answer")
@@ -13,6 +13,9 @@ logger = logging.getLogger("app.rag_answer")
 
 settings = get_settings()
 _sentence_split_pattern = re.compile(r"(?<=[。！？!?；;\n])")
+
+# 相关性阈值：低于此分数认为检索结果不相关
+RELEVANCE_THRESHOLD = 0.3
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -87,6 +90,71 @@ def _build_llm_context_blocks(sources: list[dict[str, Any]]) -> list[str]:
 
 
 def answer_question_from_hits(question: str, hits: list[dict[str, Any]], history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """
+    基于检索结果回答问题
+
+    策略：
+    1. 如果检索结果相关性高 → 基于文档回答（RAG）
+    2. 如果检索结果相关性低或为空 → LLM 直接回答（兜底）
+    """
+    # 判断检索结果的相关性
+    max_score = max([hit.get("score", 0.0) for hit in hits], default=0.0)
+    is_relevant = max_score >= RELEVANCE_THRESHOLD and len(hits) > 0
+
+    logger.info(
+        "检索结果分析: hits=%d, max_score=%.3f, is_relevant=%s",
+        len(hits),
+        max_score,
+        is_relevant,
+    )
+
+    # 如果检索结果不相关，直接用 LLM 回答
+    if not is_relevant:
+        logger.info("检索结果不相关，使用 LLM 直接回答")
+        try:
+            answer = generate_general_answer(question, history=history)
+            answer_mode = "llm-general"
+
+            # 生成追问建议
+            suggestions = []
+            try:
+                suggestions = generate_follow_up_suggestions(question, answer)
+            except Exception:
+                pass
+
+            return {
+                "question": question,
+                "answer": answer,
+                "answerMode": answer_mode,
+                "answerModel": settings.llm_model_name,
+                "sources": [],
+                "retrievalCount": 0,
+                "suggestions": suggestions,
+            }
+        except LlmUnavailableError as exc:
+            logger.warning("LLM 不可用，返回友好提示: %s", exc)
+            return {
+                "question": question,
+                "answer": "抱歉，当前知识库中没有找到相关内容，且 AI 助手暂时不可用。请尝试换个问题或联系管理员。",
+                "answerMode": "fallback",
+                "answerModel": None,
+                "sources": [],
+                "retrievalCount": 0,
+                "suggestions": [],
+            }
+        except Exception as exc:
+            logger.error("LLM 调用异常: %s", exc, exc_info=True)
+            return {
+                "question": question,
+                "answer": "抱歉，AI 助手遇到了一些问题，请稍后再试。",
+                "answerMode": "error",
+                "answerModel": None,
+                "sources": [],
+                "retrievalCount": 0,
+                "suggestions": [],
+            }
+
+    # 检索结果相关，基于文档回答
     answer, sources = _build_extractive_answer(question, hits)
     answer_mode = "extractive-preview"
 
@@ -103,7 +171,7 @@ def answer_question_from_hits(question: str, hits: list[dict[str, Any]], history
 
     # Generate follow-up suggestions
     suggestions = []
-    if answer_mode == "llm-rag":
+    if answer_mode in ("llm-rag", "llm-general"):
         try:
             suggestions = generate_follow_up_suggestions(question, answer)
         except Exception:
@@ -113,7 +181,7 @@ def answer_question_from_hits(question: str, hits: list[dict[str, Any]], history
         "question": question,
         "answer": answer,
         "answerMode": answer_mode,
-        "answerModel": settings.llm_model_name if answer_mode == "llm-rag" else None,
+        "answerModel": settings.llm_model_name if answer_mode in ("llm-rag", "llm-general") else None,
         "sources": sources,
         "retrievalCount": len(sources),
         "suggestions": suggestions,

@@ -57,6 +57,7 @@ def get_llm_client() -> OpenAI:
 
 
 def generate_rag_answer(question: str, context_blocks: list[str], history: list[dict[str, str]] | None = None) -> str:
+    """基于检索到的文档上下文生成回答"""
     if not context_blocks:
         raise LlmUnavailableError("当前没有可用的检索上下文")
 
@@ -94,6 +95,48 @@ def generate_rag_answer(question: str, context_blocks: list[str], history: list[
             ),
         },
     )
+    completion = client.chat.completions.create(
+        model=settings.llm_model_name,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+        messages=messages,
+    )
+    content = _normalize_text(completion.choices[0].message.content if completion.choices else "")
+    logger.info("LLM 返回内容长度: %d 字符", len(content))
+    if not content:
+        raise LlmUnavailableError("LLM 未返回有效内容")
+    return content
+
+
+def generate_general_answer(question: str, history: list[dict[str, str]] | None = None) -> str:
+    """
+    LLM 直接回答问题（不依赖文档上下文）
+    用于知识库中找不到相关内容时的兜底回答
+    """
+    client = get_llm_client()
+    logger.info("调用 LLM 直接回答: question=%s, history=%d, model=%s", question[:80], len(history or []), settings.llm_model_name)
+
+    messages: list[dict[str, str]] = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个友好、专业的 AI 助手。"
+                "请根据你的知识直接回答用户的问题。"
+                "如果问题超出你的知识范围，请诚实告知用户。"
+                "回答请使用中文，简洁明了。"
+            ),
+        },
+    ]
+
+    if history:
+        for msg in history:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+    messages.append({"role": "user", "content": question.strip()})
+
     completion = client.chat.completions.create(
         model=settings.llm_model_name,
         temperature=settings.llm_temperature,

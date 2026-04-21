@@ -1,15 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Path, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import success_response
-from app.models import Document, DocumentTask, FileRecord
+from app.models import Document, DocumentTask, FileRecord, KnowledgeSpace
 from app.schemas import ApiResponse, FileRecordItem, UploadFileResult
+from app.services.document_permissions import get_document_or_404
 from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_task
+from app.services.knowledge_space_permissions import (
+    build_space_access_clause,
+    ensure_default_knowledge_space,
+    is_platform_super_admin,
+)
 from app.services.object_storage import (
     build_download_headers,
     get_minio_object,
@@ -63,14 +69,18 @@ def _store_files(
 def _create_document_jobs(
     db: DbSession,
     *,
-    current_user_id: int,
+    current_user,
+    target_space: KnowledgeSpace,
     file_records: list[FileRecord],
 ) -> tuple[list[Document], list[DocumentTask]]:
     documents: list[Document] = []
     tasks: list[DocumentTask] = []
     for file_record in file_records:
         document = Document(
-            user_id=current_user_id,
+            user_id=current_user.id,
+            space_id=target_space.id,
+            owner_user_id=current_user.id,
+            owner_department_id=current_user.department_id,
             file_id=file_record.id,
             title=file_record.original_name,
             file_name=file_record.original_name,
@@ -79,6 +89,7 @@ def _create_document_jobs(
             status="pending",
             parse_mode="auto",
         )
+        document.space = target_space
         db.add(document)
         db.flush()
 
@@ -101,6 +112,31 @@ def _get_file_or_404(db: DbSession, file_id: int) -> FileRecord:
     if not file_record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
     return file_record
+
+
+def _assert_file_access(db: DbSession, current_user, file_record: FileRecord, *, action: str = "read") -> Document | None:
+    document = db.scalar(select(Document).where(Document.file_id == file_record.id))
+    if document:
+        get_document_or_404(db, current_user, document.id, action=action)
+        return document
+
+    if file_record.user_id != current_user.id and not is_platform_super_admin(db, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该文件")
+    return None
+
+
+def _get_upload_target_space(db: DbSession, current_user, space_id: int | None) -> KnowledgeSpace:
+    if space_id is None:
+        return ensure_default_knowledge_space(db, current_user)
+
+    statement = select(KnowledgeSpace).where(KnowledgeSpace.id == space_id)
+    access_clause = build_space_access_clause(db, current_user, action="write")
+    if access_clause is not None:
+        statement = statement.where(access_clause)
+    space = db.scalar(statement)
+    if not space:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识空间不存在或无写入权限")
+    return space
 
 
 @router.post(
@@ -137,6 +173,7 @@ def upload_images(
 def upload_files(
     db: DbSession,
     current_user: CurrentUser,
+    spaceId: int | None = Form(default=None, description="上传目标知识空间 ID，不传则自动写入默认知识空间"),
     files: list[UploadFile] = File(..., description="要上传的文件列表，上传后会自动创建文档并加入处理队列"),
 ) -> dict:
     if not files:
@@ -144,8 +181,14 @@ def upload_files(
 
     uploaded_objects: list[str] = []
     try:
+        target_space = _get_upload_target_space(db, current_user, spaceId)
         file_records, uploaded_objects = _store_files(files, current_user.id, "files", "file", db)
-        documents, tasks = _create_document_jobs(db, current_user_id=current_user.id, file_records=file_records)
+        documents, tasks = _create_document_jobs(
+            db,
+            current_user=current_user,
+            target_space=target_space,
+            file_records=file_records,
+        )
         db.commit()
 
         for task in tasks:
@@ -157,7 +200,7 @@ def upload_files(
             payload = serialize_file_record(record)
             document = document_map.get(record.id)
             if document:
-                payload["document"] = serialize_document(document, include_file=False)
+                payload["document"] = serialize_document(document, include_file=False, include_space=True)
                 payload["documentId"] = document.id
                 payload["documentStatus"] = document.status
             response_items.append(payload)
@@ -172,9 +215,11 @@ def upload_files(
 def preview_image(
     file_id: Annotated[int, Path(title="文件 ID", description="要预览的图片文件主键 ID")],
     db: DbSession,
+    current_user: CurrentUser,
     download: bool = Query(default=False, title="是否下载", description="是否以附件下载方式返回图片"),
 ) -> StreamingResponse:
     file_record = _get_file_or_404(db, file_id)
+    _assert_file_access(db, current_user, file_record, action="read")
     object_response = get_minio_object(file_record.file_name)
     response = StreamingResponse(
         iter_minio_object(object_response),
@@ -188,8 +233,10 @@ def preview_image(
 def download_file(
     file_id: Annotated[int, Path(title="文件 ID", description="要下载的文件主键 ID")],
     db: DbSession,
+    current_user: CurrentUser,
 ) -> StreamingResponse:
     file_record = _get_file_or_404(db, file_id)
+    _assert_file_access(db, current_user, file_record, action="read")
     object_response = get_minio_object(file_record.file_name)
     response = StreamingResponse(
         iter_minio_object(object_response),
@@ -210,7 +257,7 @@ def delete_uploaded_file(
     _current_user: CurrentUser,
 ) -> dict:
     file_record = _get_file_or_404(db, file_id)
-    document = db.scalar(select(Document).where(Document.file_id == file_id))
+    document = _assert_file_access(db, _current_user, file_record, action="manage")
     if document:
         delete_document_vectors(document.id)
     remove_file_from_minio(file_record.file_name)

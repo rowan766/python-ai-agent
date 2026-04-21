@@ -53,6 +53,7 @@ def _document_query():
     return (
         select(Document)
         .options(selectinload(Document.file_record))
+        .options(selectinload(Document.space))
         .options(selectinload(Document.tasks))
         .options(selectinload(Document.chunks))
     )
@@ -62,9 +63,9 @@ def _document_qa_session_query():
     return select(DocumentQaSession).options(selectinload(DocumentQaSession.messages))
 
 
-def _get_document_or_404(db: DbSession, document_id: int, current_user) -> Document:
+def _get_document_detail_or_404(db: DbSession, document_id: int, current_user, *, action: str = "read") -> Document:
     statement = _document_query().where(Document.id == document_id)
-    permission_clause = build_document_permission_clause(db, current_user)
+    permission_clause = build_document_permission_clause(db, current_user, action=action)
     if permission_clause is not None:
         statement = statement.where(permission_clause)
     document = db.scalar(statement)
@@ -124,6 +125,25 @@ def _sanitize_doc_ids(doc_ids: list[int] | None) -> list[int]:
     return values
 
 
+def _sanitize_space_id(space_id: int | None) -> int | None:
+    if space_id in (None, ""):
+        return None
+    try:
+        value = int(space_id)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _resolve_qa_document_scope(doc_ids: list[int] | None) -> tuple[int | None, list[int] | None]:
+    scoped_doc_ids = _sanitize_doc_ids(doc_ids)
+    if not scoped_doc_ids:
+        return None, None
+    if len(scoped_doc_ids) == 1:
+        return scoped_doc_ids[0], None
+    return None, scoped_doc_ids
+
+
 def _build_session_title(messages: list[DocumentQaMessage], fallback: str | None = None) -> str:
     for message in messages:
         if message.role == "user" and message.content:
@@ -161,9 +181,10 @@ def get_document_list(
     pageSize: int = Query(default=10, ge=1, le=1000, title="每页条数", description="每页返回的文档数量"),
     status_filter: str | None = Query(default=None, alias="status", title="文档状态", description="按文档处理状态筛选"),
     keyword: str | None = Query(default=None, title="关键词", description="按文档标题模糊搜索"),
+    spaceId: int | None = Query(default=None, title="知识空间 ID", description="按所属知识空间筛选"),
 ) -> dict:
     filters = []
-    permission_clause = build_document_permission_clause(db, current_user)
+    permission_clause = build_document_permission_clause(db, current_user, action="read")
     if permission_clause is not None:
         filters.append(permission_clause)
     if status_filter:
@@ -171,6 +192,8 @@ def get_document_list(
     if keyword:
         keyword_value = f"%{keyword.strip()}%"
         filters.append(Document.title.ilike(keyword_value))
+    if spaceId is not None:
+        filters.append(Document.space_id == spaceId)
 
     total = db.scalar(select(func.count()).select_from(Document).where(*filters)) or 0
 
@@ -178,13 +201,19 @@ def get_document_list(
     documents = db.scalars(
         select(Document)
         .options(selectinload(Document.file_record))
+        .options(selectinload(Document.space))
         .where(*filters)
         .order_by(Document.id.desc())
         .offset((page - 1) * pageSize)
         .limit(pageSize)
     ).all()
 
-    return paginated_response([serialize_document(item, include_tasks=False) for item in documents], total, page, pageSize)
+    return paginated_response(
+        [serialize_document(item, include_tasks=False, include_space=True) for item in documents],
+        total,
+        page,
+        pageSize,
+    )
 
 
 @router.get(
@@ -200,7 +229,7 @@ def get_document_task_list(
     status_filter: str | None = Query(default=None, alias="status", title="任务状态", description="按任务处理状态筛选"),
 ) -> dict:
     filters = []
-    permission_clause = build_document_permission_clause(db, current_user)
+    permission_clause = build_document_permission_clause(db, current_user, action="read")
     if permission_clause is not None:
         filters.append(DocumentTask.document_id.in_(select(Document.id).where(permission_clause)))
     if status_filter:
@@ -248,6 +277,7 @@ def search_documents(
     current_user: CurrentUser,
     limit: int = Query(default=5, ge=1, le=20, title="返回条数", description="最多返回的检索结果数量"),
     documentId: int | None = Query(default=None, title="文档 ID", description="限定在某份文档范围内检索"),
+    spaceId: int | None = Query(default=None, title="知识空间 ID", description="限定在某个知识空间内检索"),
 ) -> dict:
     keyword = query.strip()
     if not keyword:
@@ -259,6 +289,7 @@ def search_documents(
         query=keyword,
         limit=limit,
         document_id=documentId,
+        space_id=spaceId,
     )
     return success_response(hits)
 
@@ -292,6 +323,7 @@ def create_document_qa_session(
 ) -> dict:
     session = DocumentQaSession(
         user_id=current_user.id,
+        space_id=_sanitize_space_id(payload.spaceId),
         document_ids_json=json.dumps(_sanitize_doc_ids(payload.docIds), ensure_ascii=False),
     )
     db.add(session)
@@ -314,6 +346,7 @@ def update_document_qa_session(
 ) -> dict:
     session = _get_document_qa_session_or_404(db, session_id, current_user)
     session.title = (payload.title or "").strip() or None
+    session.space_id = _sanitize_space_id(payload.spaceId)
     session.document_ids_json = json.dumps(_sanitize_doc_ids(payload.docIds), ensure_ascii=False)
     db.commit()
     db.refresh(session)
@@ -333,6 +366,7 @@ def sync_document_qa_session(
     current_user: CurrentUser,
 ) -> dict:
     session = _get_document_qa_session_or_404(db, session_id, current_user)
+    session.space_id = _sanitize_space_id(payload.spaceId)
     session.document_ids_json = json.dumps(_sanitize_doc_ids(payload.docIds), ensure_ascii=False)
     _replace_session_messages(session, payload.messages)
     session.title = _build_session_title(session.messages, fallback=payload.title) or None
@@ -407,7 +441,13 @@ def get_document_detail(
     db: DbSession,
     current_user: CurrentUser,
 ) -> dict:
-    return success_response(serialize_document(_get_document_or_404(db, document_id, current_user), include_tasks=True))
+    return success_response(
+        serialize_document(
+            _get_document_detail_or_404(db, document_id, current_user, action="read"),
+            include_tasks=True,
+            include_space=True,
+        )
+    )
 
 
 @router.get(
@@ -422,7 +462,7 @@ def get_document_chunks(
     page: int = Query(default=1, ge=1, title="页码", description="分页页码，从 1 开始"),
     pageSize: int = Query(default=10, ge=1, le=1000, title="每页条数", description="每页返回的切片数量"),
 ) -> dict:
-    _get_document_or_404(db, document_id, current_user)
+    _get_document_detail_or_404(db, document_id, current_user, action="read")
     total = db.scalar(select(func.count()).select_from(DocumentChunk).where(DocumentChunk.document_id == document_id)) or 0
     chunks = db.scalars(
         select(DocumentChunk)
@@ -445,7 +485,7 @@ def delete_document(
     current_user: CurrentUser,
     request: Request,
 ) -> dict:
-    document = _get_document_or_404(db, document_id, current_user)
+    document = _get_document_detail_or_404(db, document_id, current_user, action="manage")
     if document.status == "processing":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="文档正在处理中，请稍后再删除")
 
@@ -557,7 +597,7 @@ def reprocess_document(
     db: DbSession,
     current_user: CurrentUser,
 ) -> dict:
-    document = _get_document_or_404(db, document_id, current_user)
+    document = _get_document_detail_or_404(db, document_id, current_user, action="manage")
     latest_task = db.scalar(
         select(DocumentTask)
         .where(DocumentTask.document_id == document_id)
@@ -586,7 +626,7 @@ def reprocess_document(
     db.refresh(task)
     enqueue_document_task(task.id, task.queue_name)
 
-    refreshed = _get_document_or_404(db, document.id, current_user)
+    refreshed = _get_document_detail_or_404(db, document.id, current_user, action="manage")
     return success_response(
         {
             "document": serialize_document(refreshed, include_tasks=True),
@@ -614,12 +654,14 @@ def document_qa(
     if payload.history:
         history = [{"role": m.role, "content": m.content} for m in payload.history if m.role in ("user", "assistant")]
 
+    document_id, document_ids = _resolve_qa_document_scope(payload.documentIds)
     hits = retrieve_document_chunks(
         db,
         current_user,
         query=question,
         limit=payload.limit,
-        document_id=payload.documentIds[0] if payload.documentIds and len(payload.documentIds) == 1 else None,
-        document_ids=payload.documentIds if payload.documentIds and len(payload.documentIds) > 1 else None,
+        document_id=document_id,
+        document_ids=document_ids,
+        space_id=payload.spaceId,
     )
     return success_response(answer_question_from_hits(question, hits, history=history))

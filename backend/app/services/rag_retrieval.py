@@ -65,8 +65,17 @@ def retrieve_document_chunks(
     limit: int,
     document_id: int | None = None,
     document_ids: list[int] | None = None,
+    space_id: int | None = None,
+    space_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
-    accessible_document_ids = get_accessible_document_ids(db, current_user, document_id=document_id, document_ids=document_ids)
+    accessible_document_ids = get_accessible_document_ids(
+        db,
+        current_user,
+        document_id=document_id,
+        document_ids=document_ids,
+        space_id=space_id,
+        space_ids=space_ids,
+    )
     if not accessible_document_ids:
         return []
 
@@ -116,7 +125,7 @@ def retrieve_document_chunks(
             "documentId": int(hit["documentId"]),
             "chunkIndex": int(hit["chunkIndex"]),
             "content": content,
-            "document": serialize_document(chunk.document, include_file=False) if chunk and chunk.document else None,
+            "document": serialize_document(chunk.document, include_file=False, include_space=True) if chunk and chunk.document else None,
         }
 
     for chunk in _build_lexical_candidates(db, accessible_document_ids, query, candidate_limit):
@@ -142,7 +151,7 @@ def retrieve_document_chunks(
             "documentId": chunk.document_id,
             "chunkIndex": chunk.chunk_index,
             "content": chunk.content,
-            "document": serialize_document(chunk.document, include_file=False) if chunk.document else None,
+            "document": serialize_document(chunk.document, include_file=False, include_space=True) if chunk.document else None,
         }
 
     results = list(chunk_payload_map.values())

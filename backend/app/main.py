@@ -12,12 +12,14 @@ from app.api.departments import router as department_router
 from app.api.documents import router as document_router
 from app.api.dicts import data_router as dict_data_router
 from app.api.dicts import type_router as dict_type_router
+from app.api.knowledge_spaces import router as knowledge_space_router
 from app.api.menus import router as menu_router
 from app.api.roles import router as role_router
 from app.api.uploads import router as upload_router
 from app.api.users import router as user_router
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
+from app.core.schema_sync import ensure_runtime_schema
 from app.core.redis_client import get_redis_client
 from app.services.object_storage import ensure_minio_bucket
 from app.services.qdrant_vector_store import QdrantUnavailableError, ensure_qdrant_collection
@@ -43,6 +45,7 @@ openapi_tags = [
     {"name": "数据字典", "description": "字典类型与字典数据接口"},
     {"name": "文件上传", "description": "图片、文件上传与下载接口"},
     {"name": "文档处理", "description": "文档入队、任务状态、切片检索与 RAG 问答接口"},
+    {"name": "知识空间", "description": "知识空间列表、创建、详情与更新接口"},
 ]
 
 
@@ -59,6 +62,7 @@ async def lifespan(_app: FastAPI):
         logger.warning("Qdrant 初始化跳过: %s", exc)
         print(f"Qdrant 初始化跳过: {exc}")
     Base.metadata.create_all(bind=engine)
+    ensure_runtime_schema()
     with SessionLocal() as db:
         seed_database(db)
     docs_url = f"http://127.0.0.1:{settings.app_port}/docs"
@@ -201,5 +205,6 @@ app.include_router(menu_router)
 app.include_router(department_router)
 app.include_router(dict_type_router)
 app.include_router(dict_data_router)
+app.include_router(knowledge_space_router)
 app.include_router(upload_router)
 app.include_router(document_router)

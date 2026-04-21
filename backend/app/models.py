@@ -35,6 +35,7 @@ class Department(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(String(200))
 
     users: Mapped[list["User"]] = relationship(back_populates="department")
+    owned_knowledge_spaces: Mapped[list["KnowledgeSpace"]] = relationship(back_populates="owner_department")
     role_departments: Mapped[list["RoleDepartment"]] = relationship(
         back_populates="department",
         cascade="all, delete-orphan",
@@ -127,6 +128,11 @@ class User(Base, TimestampMixin):
     user_roles: Mapped[list["UserRole"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     files: Mapped[list["FileRecord"]] = relationship(back_populates="user")
     documents: Mapped[list["Document"]] = relationship(back_populates="user")
+    created_knowledge_spaces: Mapped[list["KnowledgeSpace"]] = relationship(back_populates="creator")
+    knowledge_space_memberships: Mapped[list["KnowledgeSpaceMember"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     document_qa_sessions: Mapped[list["DocumentQaSession"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
@@ -243,16 +249,84 @@ class DictData(Base, TimestampMixin):
     dict_type: Mapped[DictType] = relationship(back_populates="items")
 
 
+class KnowledgeSpace(Base, TimestampMixin):
+    __tablename__ = "knowledge_space"
+    __table_args__ = (
+        Index("idx_knowledge_space_created_by", "created_by"),
+        Index("idx_knowledge_space_owner_department_id", "owner_department_id"),
+        Index("idx_knowledge_space_status", "status"),
+        Index("idx_knowledge_space_visibility_mode", "visibility_mode"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[int] = mapped_column(default=1)
+    created_by: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
+    owner_department_id: Mapped[int | None] = mapped_column(ForeignKey("sys_department.id", ondelete="SET NULL"))
+    visibility_mode: Mapped[str] = mapped_column(String(20), default="private")
+
+    creator: Mapped[User] = relationship(back_populates="created_knowledge_spaces")
+    owner_department: Mapped[Department | None] = relationship(back_populates="owned_knowledge_spaces")
+    members: Mapped[list["KnowledgeSpaceMember"]] = relationship(
+        back_populates="space",
+        cascade="all, delete-orphan",
+    )
+    shares: Mapped[list["KnowledgeSpaceShare"]] = relationship(
+        back_populates="space",
+        cascade="all, delete-orphan",
+    )
+    documents: Mapped[list["Document"]] = relationship(back_populates="space")
+
+
+class KnowledgeSpaceMember(Base, TimestampMixin):
+    __tablename__ = "knowledge_space_member"
+    __table_args__ = (
+        UniqueConstraint("space_id", "user_id", name="uq_knowledge_space_member_space_user"),
+        Index("idx_knowledge_space_member_user_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    space_id: Mapped[int] = mapped_column(ForeignKey("knowledge_space.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
+    space_role: Mapped[str] = mapped_column(String(20), default="viewer")
+
+    space: Mapped[KnowledgeSpace] = relationship(back_populates="members")
+    user: Mapped[User] = relationship(back_populates="knowledge_space_memberships")
+
+
+class KnowledgeSpaceShare(Base, TimestampMixin):
+    __tablename__ = "knowledge_space_share"
+    __table_args__ = (
+        UniqueConstraint("space_id", "target_type", "target_id", name="uq_knowledge_space_share_target"),
+        Index("idx_knowledge_space_share_target", "target_type", "target_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    space_id: Mapped[int] = mapped_column(ForeignKey("knowledge_space.id", ondelete="CASCADE"))
+    target_type: Mapped[str] = mapped_column(String(20))
+    target_id: Mapped[int] = mapped_column(Integer)
+    permission_level: Mapped[str] = mapped_column(String(20), default="read")
+
+    space: Mapped[KnowledgeSpace] = relationship(back_populates="shares")
+
+
 class Document(Base, TimestampMixin):
     __tablename__ = "sys_document"
     __table_args__ = (
         Index("idx_document_user_id", "user_id"),
+        Index("idx_document_space_id", "space_id"),
+        Index("idx_document_owner_user_id", "owner_user_id"),
+        Index("idx_document_owner_department_id", "owner_department_id"),
         Index("idx_document_status", "status"),
         Index("idx_document_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
+    space_id: Mapped[int | None] = mapped_column(ForeignKey("knowledge_space.id", ondelete="SET NULL"))
+    owner_user_id: Mapped[int | None] = mapped_column(Integer)
+    owner_department_id: Mapped[int | None] = mapped_column(Integer)
     file_id: Mapped[int] = mapped_column(ForeignKey("sys_file.id", ondelete="CASCADE"), unique=True)
     title: Mapped[str] = mapped_column(String(255))
     file_name: Mapped[str] = mapped_column(String(255))
@@ -266,6 +340,7 @@ class Document(Base, TimestampMixin):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="documents")
+    space: Mapped[KnowledgeSpace | None] = relationship(back_populates="documents")
     file_record: Mapped[FileRecord] = relationship(back_populates="document")
     tasks: Mapped[list["DocumentTask"]] = relationship(back_populates="document", cascade="all, delete-orphan")
     chunks: Mapped[list["DocumentChunk"]] = relationship(back_populates="document", cascade="all, delete-orphan")
@@ -318,6 +393,7 @@ class DocumentQaSession(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))
     title: Mapped[str | None] = mapped_column(String(255))
+    space_id: Mapped[int | None] = mapped_column(Integer)
     document_ids_json: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped[User] = relationship(back_populates="document_qa_sessions")

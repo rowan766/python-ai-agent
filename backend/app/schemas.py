@@ -353,6 +353,9 @@ class DocumentChunkItem(BaseModel):
 class DocumentItem(BaseModel):
     id: int = Field(title="文档 ID", description="文档主键 ID")
     userId: int = Field(title="上传用户 ID", description="上传该文档的用户 ID")
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="所属知识空间 ID")
+    ownerUserId: int | None = Field(default=None, title="归属用户 ID", description="文档归属用户快照 ID")
+    ownerDepartmentId: int | None = Field(default=None, title="归属部门 ID", description="文档归属部门快照 ID")
     fileId: int = Field(title="文件 ID", description="关联的文件记录 ID")
     title: str = Field(title="文档标题", description="文档标题")
     fileName: str = Field(title="文件名称", description="原始文件名称")
@@ -367,8 +370,66 @@ class DocumentItem(BaseModel):
     createdAt: str | None = Field(default=None, title="创建时间", description="文档创建时间")
     updatedAt: str | None = Field(default=None, title="更新时间", description="文档最后更新时间")
     file: FileRecordItem | None = Field(default=None, title="文件信息", description="关联的文件详情")
+    space: "KnowledgeSpaceItem | None" = Field(default=None, title="知识空间信息", description="所属知识空间信息")
     tasks: list[DocumentTaskItem] = Field(default_factory=list, title="任务列表", description="文档关联的处理任务列表")
     chunks: list[DocumentChunkItem] = Field(default_factory=list, title="切片列表", description="文档关联的切片列表")
+
+
+class KnowledgeSpaceMemberItem(BaseModel):
+    id: int = Field(title="成员 ID", description="空间成员主键 ID")
+    spaceId: int = Field(title="知识空间 ID", description="所属知识空间 ID")
+    userId: int = Field(title="用户 ID", description="关联用户 ID")
+    spaceRole: str = Field(title="空间角色", description="用户在空间中的角色，例如 owner、manager、editor、viewer")
+    createdAt: str | None = Field(default=None, title="创建时间", description="成员创建时间")
+    updatedAt: str | None = Field(default=None, title="更新时间", description="成员更新时间")
+    user: UserItem | None = Field(default=None, title="用户信息", description="关联用户信息")
+
+
+class KnowledgeSpaceShareItem(BaseModel):
+    id: int = Field(title="共享 ID", description="空间共享记录主键 ID")
+    spaceId: int = Field(title="知识空间 ID", description="所属知识空间 ID")
+    targetType: str = Field(title="共享目标类型", description="共享目标类型，例如 department、role、user")
+    targetId: int = Field(title="共享目标 ID", description="共享目标主键 ID")
+    permissionLevel: str = Field(title="权限级别", description="共享授予的权限级别，例如 read、write、manage")
+    createdAt: str | None = Field(default=None, title="创建时间", description="共享记录创建时间")
+    updatedAt: str | None = Field(default=None, title="更新时间", description="共享记录更新时间")
+
+
+class KnowledgeSpaceItem(BaseModel):
+    id: int = Field(title="知识空间 ID", description="知识空间主键 ID")
+    name: str = Field(title="空间名称", description="知识空间名称")
+    description: str | None = Field(default=None, title="空间描述", description="知识空间描述")
+    status: int = Field(title="状态", description="空间状态，1 表示启用，0 表示停用")
+    createdBy: int = Field(title="创建人 ID", description="创建该空间的用户 ID")
+    ownerDepartmentId: int | None = Field(default=None, title="归属部门 ID", description="空间归属部门 ID")
+    visibilityMode: str = Field(title="可见性模式", description="空间可见性模式，例如 private、department、shared")
+    createdAt: str | None = Field(default=None, title="创建时间", description="空间创建时间")
+    updatedAt: str | None = Field(default=None, title="更新时间", description="空间更新时间")
+    memberCount: int = Field(default=0, title="成员数量", description="空间成员数量")
+    shareCount: int = Field(default=0, title="共享数量", description="空间共享记录数量")
+    creator: UserItem | None = Field(default=None, title="创建人信息", description="空间创建人信息")
+    ownerDepartment: DepartmentItem | None = Field(default=None, title="归属部门信息", description="空间归属部门信息")
+    members: list[KnowledgeSpaceMemberItem] = Field(default_factory=list, title="成员列表", description="空间成员列表")
+    shares: list[KnowledgeSpaceShareItem] = Field(default_factory=list, title="共享列表", description="空间共享列表")
+
+
+class KnowledgeSpaceUpsertRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100, title="空间名称", description="知识空间名称")
+    description: str | None = Field(default=None, max_length=500, title="空间描述", description="知识空间描述")
+    ownerDepartmentId: int | None = Field(default=None, title="归属部门 ID", description="空间归属部门 ID")
+    visibilityMode: str = Field(default="private", title="可见性模式", description="空间可见性模式，例如 private、department、shared")
+    status: int = Field(default=1, title="状态", description="空间状态，1 表示启用，0 表示停用")
+
+
+class KnowledgeSpaceMemberUpsertRequest(BaseModel):
+    userId: int = Field(title="用户 ID", description="要加入空间的用户 ID")
+    spaceRole: str = Field(default="viewer", title="空间角色", description="空间角色，例如 owner、manager、editor、viewer")
+
+
+class KnowledgeSpaceShareUpsertRequest(BaseModel):
+    targetType: str = Field(title="共享目标类型", description="共享目标类型，例如 department、role、user")
+    targetId: int = Field(title="共享目标 ID", description="共享目标主键 ID")
+    permissionLevel: str = Field(default="read", title="权限级别", description="共享权限级别，例如 read、write、manage")
 
 
 class CaptchaData(BaseModel):
@@ -414,12 +475,15 @@ class DocumentQaRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000, title="问题", description="用户发起的检索问答问题")
     limit: int = Field(default=4, ge=1, le=10, title="命中数量", description="问答前召回的切片数量")
     documentIds: list[int] | None = Field(default=None, title="文档 ID 列表", description="限定在多份文档内进行问答，为空则检索全部可见文档")
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="限定在某个知识空间内进行问答")
     history: list[ChatMessage] = Field(default_factory=list, title="对话历史", description="本轮之前的对话历史，用于多轮上下文")
 
 
 class DocumentQaSourceItem(BaseModel):
     documentId: int | None = Field(default=None, title="文档 ID", description="命中来源文档 ID")
     documentTitle: str | None = Field(default=None, title="文档标题", description="命中来源文档标题")
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="命中来源所属知识空间 ID")
+    spaceName: str | None = Field(default=None, title="知识空间名称", description="命中来源所属知识空间名称")
     chunkId: int | None = Field(default=None, title="切片 ID", description="命中的切片 ID")
     chunkIndex: int | None = Field(default=None, title="切片序号", description="命中的切片序号")
     score: float | None = Field(default=None, title="综合分数", description="切片综合排序分数")
@@ -452,16 +516,19 @@ class DocumentQaSessionItem(BaseModel):
     title: str | None = Field(default=None, title="会话标题", description="会话标题")
     createdAt: str | None = Field(default=None, title="创建时间", description="会话创建时间")
     updatedAt: str | None = Field(default=None, title="更新时间", description="会话更新时间")
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="当前会话限定的知识空间 ID")
     docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
     messages: list[DocumentQaMessageItem] = Field(default_factory=list, title="消息列表", description="当前会话的全部消息")
 
 
 class DocumentQaSessionCreateRequest(BaseModel):
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="当前会话限定的知识空间 ID")
     docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
 
 
 class DocumentQaSessionUpdateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=255, title="会话标题", description="更新后的会话标题")
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="当前会话限定的知识空间 ID")
     docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
 
 
@@ -477,6 +544,7 @@ class DocumentQaMessageCreateRequest(BaseModel):
 
 class DocumentQaSessionSyncRequest(BaseModel):
     title: str | None = Field(default=None, max_length=255, title="会话标题", description="会话标题")
+    spaceId: int | None = Field(default=None, title="知识空间 ID", description="当前会话限定的知识空间 ID")
     docIds: list[int] = Field(default_factory=list, title="文档范围", description="当前会话限定的文档 ID 列表")
     messages: list[DocumentQaMessageCreateRequest] = Field(default_factory=list, title="消息列表", description="当前会话全部消息")
 
@@ -494,3 +562,5 @@ class UploadFileResult(FileRecordItem):
 
 DepartmentItem.model_rebuild()
 MenuItem.model_rebuild()
+KnowledgeSpaceItem.model_rebuild()
+DocumentItem.model_rebuild()

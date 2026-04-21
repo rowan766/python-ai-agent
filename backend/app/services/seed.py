@@ -57,20 +57,28 @@ MENUS = [
     {"id": 13, "parent_id": 10, "name": "AssetFacility", "title": "附属设施", "type": "menu", "path": "/asset/facility", "component": "views/assetManagement/Facility", "permission": None, "icon": None, "sort": 3, "visible": 1, "status": 1},
     {"id": 14, "parent_id": 10, "name": "AssetStation", "title": "养护站管理", "type": "menu", "path": "/asset/station", "component": "views/assetManagement/Station", "permission": None, "icon": None, "sort": 4, "visible": 1, "status": 1},
     {"id": 18, "parent_id": 10, "name": "AssetDocument", "title": "文档处理", "type": "menu", "path": "/asset/document", "component": "views/assetManagement/Document", "permission": None, "icon": None, "sort": 5, "visible": 1, "status": 1},
-    {"id": 20, "parent_id": 10, "name": "UploadTest", "title": "上传测试", "type": "menu", "path": "/asset/upload-test", "component": "views/Dashboard", "permission": None, "icon": None, "sort": 6, "visible": 1, "status": 1},
+    {"id": 27, "parent_id": 10, "name": "AssetKnowledgeSpace", "title": "知识空间", "type": "menu", "path": "/asset/knowledge-space", "component": "views/assetManagement/KnowledgeSpace", "permission": None, "icon": None, "sort": 6, "visible": 1, "status": 1},
+    {"id": 20, "parent_id": 10, "name": "UploadTest", "title": "上传测试", "type": "menu", "path": "/asset/upload-test", "component": "views/Dashboard", "permission": None, "icon": None, "sort": 7, "visible": 1, "status": 1},
     {"id": 15, "parent_id": 11, "name": "asset:bridge:create", "title": "新增", "type": "button", "path": None, "component": None, "permission": "asset:bridge:create", "icon": None, "sort": 1, "visible": 1, "status": 1},
     {"id": 16, "parent_id": 11, "name": "asset:bridge:update", "title": "编辑", "type": "button", "path": None, "component": None, "permission": "asset:bridge:update", "icon": None, "sort": 2, "visible": 1, "status": 1},
     {"id": 17, "parent_id": 11, "name": "asset:bridge:delete", "title": "删除", "type": "button", "path": None, "component": None, "permission": "asset:bridge:delete", "icon": None, "sort": 3, "visible": 1, "status": 1},
+    {"id": 21, "parent_id": 18, "name": "knowledge:space:create", "title": "创建空间", "type": "button", "path": None, "component": None, "permission": "knowledge:space:create", "icon": None, "sort": 1, "visible": 1, "status": 1},
+    {"id": 22, "parent_id": 18, "name": "knowledge:space:share", "title": "共享空间", "type": "button", "path": None, "component": None, "permission": "knowledge:space:share", "icon": None, "sort": 2, "visible": 1, "status": 1},
+    {"id": 23, "parent_id": 18, "name": "knowledge:document:upload", "title": "上传文档", "type": "button", "path": None, "component": None, "permission": "knowledge:document:upload", "icon": None, "sort": 3, "visible": 1, "status": 1},
+    {"id": 24, "parent_id": 18, "name": "knowledge:document:download", "title": "下载文档", "type": "button", "path": None, "component": None, "permission": "knowledge:document:download", "icon": None, "sort": 4, "visible": 1, "status": 1},
+    {"id": 25, "parent_id": 18, "name": "knowledge:document:reprocess", "title": "重试文档", "type": "button", "path": None, "component": None, "permission": "knowledge:document:reprocess", "icon": None, "sort": 5, "visible": 1, "status": 1},
+    {"id": 26, "parent_id": 18, "name": "knowledge:document:delete", "title": "删除文档", "type": "button", "path": None, "component": None, "permission": "knowledge:document:delete", "icon": None, "sort": 6, "visible": 1, "status": 1},
 ]
 
 
 ROLE_MENUS = [
-    (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20),
-    (4, 3), (4, 10), (4, 11), (4, 12), (4, 13), (4, 14), (4, 18), (4, 19), (4, 20),
-    (5, 3), (5, 10), (5, 11), (5, 12), (5, 13), (5, 14), (5, 18), (5, 19), (5, 20),
-    (6, 3), (6, 10), (6, 11), (6, 12), (6, 13), (6, 14), (6, 18), (6, 19), (6, 20),
-    (7, 3), (7, 10), (7, 11), (7, 12), (7, 13), (7, 14), (7, 18), (7, 19), (7, 20),
-    (8, 3), (8, 10), (8, 11), (8, 12), (8, 13), (8, 14), (8, 18), (8, 19), (8, 20),
+    (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 11), (1, 12), (1, 13), (1, 14), (1, 15), (1, 16), (1, 17), (1, 18), (1, 19), (1, 20), (1, 27),
+    (1, 21), (1, 22), (1, 23), (1, 24), (1, 25), (1, 26),
+    (4, 3), (4, 10), (4, 11), (4, 12), (4, 13), (4, 14), (4, 18), (4, 19), (4, 20), (4, 21), (4, 22), (4, 23), (4, 24), (4, 25), (4, 26), (4, 27),
+    (5, 3), (5, 10), (5, 11), (5, 12), (5, 13), (5, 14), (5, 18), (5, 19), (5, 20), (5, 21), (5, 22), (5, 23), (5, 24), (5, 25), (5, 26), (5, 27),
+    (6, 3), (6, 10), (6, 11), (6, 12), (6, 13), (6, 14), (6, 18), (6, 19), (6, 20), (6, 21), (6, 22), (6, 23), (6, 24), (6, 25), (6, 26), (6, 27),
+    (7, 3), (7, 10), (7, 11), (7, 12), (7, 13), (7, 14), (7, 18), (7, 19), (7, 20), (7, 21), (7, 22), (7, 23), (7, 24), (7, 25), (7, 26), (7, 27),
+    (8, 3), (8, 10), (8, 11), (8, 12), (8, 13), (8, 14), (8, 18), (8, 19), (8, 20), (8, 21), (8, 22), (8, 23), (8, 24), (8, 25), (8, 26), (8, 27),
 ]
 
 

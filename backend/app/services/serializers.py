@@ -7,11 +7,14 @@ from app.models import (
     DictData,
     DictType,
     Document,
+    DocumentChunk,
     DocumentQaMessage,
     DocumentQaSession,
-    DocumentChunk,
     DocumentTask,
     FileRecord,
+    KnowledgeSpace,
+    KnowledgeSpaceMember,
+    KnowledgeSpaceShare,
     Menu,
     Role,
     User,
@@ -153,6 +156,58 @@ def serialize_dict_data(dict_data: DictData) -> dict[str, Any]:
     }
 
 
+def serialize_knowledge_space_member(member: KnowledgeSpaceMember) -> dict[str, Any]:
+    return {
+        "id": member.id,
+        "spaceId": member.space_id,
+        "userId": member.user_id,
+        "spaceRole": member.space_role,
+        "createdAt": format_datetime(member.created_at),
+        "updatedAt": format_datetime(member.updated_at),
+        "user": serialize_user(member.user, include_relations=False) if member.user else None,
+    }
+
+
+def serialize_knowledge_space_share(share: KnowledgeSpaceShare) -> dict[str, Any]:
+    return {
+        "id": share.id,
+        "spaceId": share.space_id,
+        "targetType": share.target_type,
+        "targetId": share.target_id,
+        "permissionLevel": share.permission_level,
+        "createdAt": format_datetime(share.created_at),
+        "updatedAt": format_datetime(share.updated_at),
+    }
+
+
+def serialize_knowledge_space(
+    space: KnowledgeSpace,
+    *,
+    include_members: bool = False,
+    include_shares: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": space.id,
+        "name": space.name,
+        "description": space.description,
+        "status": space.status,
+        "createdBy": space.created_by,
+        "ownerDepartmentId": space.owner_department_id,
+        "visibilityMode": space.visibility_mode,
+        "createdAt": format_datetime(space.created_at),
+        "updatedAt": format_datetime(space.updated_at),
+        "memberCount": len(space.members) if "members" in space.__dict__ else 0,
+        "shareCount": len(space.shares) if "shares" in space.__dict__ else 0,
+        "creator": serialize_user(space.creator, include_relations=False) if space.creator else None,
+        "ownerDepartment": serialize_department(space.owner_department) if space.owner_department else None,
+    }
+    if include_members:
+        payload["members"] = [serialize_knowledge_space_member(member) for member in space.members]
+    if include_shares:
+        payload["shares"] = [serialize_knowledge_space_share(share) for share in space.shares]
+    return payload
+
+
 def serialize_file_record(file_record: FileRecord) -> dict[str, Any]:
     return {
         "id": file_record.id,
@@ -218,10 +273,14 @@ def serialize_document(
     include_file: bool = True,
     include_tasks: bool = False,
     include_chunks: bool = False,
+    include_space: bool = False,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "id": document.id,
         "userId": document.user_id,
+        "spaceId": document.space_id,
+        "ownerUserId": document.owner_user_id,
+        "ownerDepartmentId": document.owner_department_id,
         "fileId": document.file_id,
         "title": document.title,
         "fileName": document.file_name,
@@ -238,6 +297,8 @@ def serialize_document(
     }
     if include_file:
         payload["file"] = serialize_file_record(document.file_record) if document.file_record else None
+    if include_space:
+        payload["space"] = serialize_knowledge_space(document.space) if document.space else None
     if include_tasks:
         payload["tasks"] = [
             serialize_document_task(task)
@@ -280,6 +341,7 @@ def serialize_document_qa_session(session: DocumentQaSession) -> dict[str, Any]:
         "title": session.title,
         "createdAt": format_datetime(session.created_at),
         "updatedAt": format_datetime(session.updated_at),
+        "spaceId": session.space_id,
         "docIds": _safe_parse_json_list(session.document_ids_json),
         "messages": [serialize_document_qa_message(message) for message in session.messages],
     }

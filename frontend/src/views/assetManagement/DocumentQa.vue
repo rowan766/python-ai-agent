@@ -16,6 +16,26 @@
       </div>
 
       <div v-show="!sidebarCollapsed" class="sidebar-body">
+        <div class="sidebar-section">
+          <label class="section-label">知识空间</label>
+          <el-select
+            v-model="selectedSpaceId"
+            clearable
+            filterable
+            placeholder="默认检索全部可见空间"
+            size="small"
+            class="doc-select"
+            @change="handleSpaceChange"
+          >
+            <el-option
+              v-for="item in knowledgeSpaceOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </div>
+
         <!-- 文档范围选择（多选） -->
         <div class="sidebar-section">
           <label class="section-label">限定文档</label>
@@ -150,6 +170,7 @@
                       >
                         <div class="source-item__header">
                           <strong>{{ src.documentTitle || `文档 #${src.documentId}` }}</strong>
+                          <span v-if="src.spaceName" class="source-item__space">{{ src.spaceName }}</span>
                           <span class="source-item__score">{{ Number(src.score || 0).toFixed(4) }}</span>
                           <span class="source-item__index">切片 {{ src.chunkIndex ?? '-' }}</span>
                         </div>
@@ -205,6 +226,7 @@
       <div v-if="activeSource" class="source-preview-dialog">
         <div class="sp-meta">
           <span>{{ activeSource.documentTitle || `\u6587\u6863 #${activeSource.documentId}` }}</span>
+          <em v-if="activeSource.spaceName">\u7A7A\u95F4 {{ activeSource.spaceName }}</em>
           <em>\u5207\u7247 {{ activeSource.chunkIndex ?? '-' }}</em>
           <em>\u5F97\u5206 {{ Number(activeSource.score || 0).toFixed(4) }}</em>
         </div>
@@ -245,6 +267,7 @@ import {
   syncDocumentQaSession,
   updateDocumentQaSession,
 } from '../../api/document'
+import { getKnowledgeSpaceList } from '../../api/knowledge-space'
 
 // ---- Markdown 配置 ----
 marked.setOptions({
@@ -257,7 +280,9 @@ let uidCounter = 0
 const makeUid = () => `msg-${Date.now()}-${++uidCounter}`
 
 const sidebarCollapsed = ref(false)
+const selectedSpaceId = ref(null)
 const selectedDocIds = ref([])
+const knowledgeSpaceOptions = ref([])
 const documentOptions = ref([])
 const inputText = ref('')
 const loading = ref(false)
@@ -297,6 +322,7 @@ const normalizeSession = (session = {}) => ({
   messages: Array.isArray(session.messages) ? session.messages.map(normalizeMessage) : [],
   createdAt: session.createdAt || '',
   updatedAt: session.updatedAt || '',
+  spaceId: Number.isInteger(Number(session.spaceId)) && Number(session.spaceId) > 0 ? Number(session.spaceId) : null,
   docIds: Array.isArray(session.docIds)
     ? session.docIds.map(item => Number(item)).filter(item => Number.isInteger(item) && item > 0)
     : [],
@@ -306,9 +332,26 @@ const sortedSessions = computed(() => {
   return [...chatSessions.value].sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt))
 })
 
+const availableDocumentIdSet = computed(() => {
+  return new Set(
+    documentOptions.value
+      .map(item => Number(item?.id))
+      .filter(item => Number.isInteger(item) && item > 0),
+  )
+})
+
+const getScopedDocIds = () => {
+  const validDocIds = selectedDocIds.value
+    .map(item => Number(item))
+    .filter(item => Number.isInteger(item) && item > 0 && availableDocumentIdSet.value.has(item))
+
+  return validDocIds.length > 0 ? validDocIds : []
+}
+
 const applyCurrentSession = (session) => {
   currentSessionId.value = session?.id ?? null
   messages.value = Array.isArray(session?.messages) ? session.messages.map(normalizeMessage) : []
+  selectedSpaceId.value = session?.spaceId ?? null
   selectedDocIds.value = Array.isArray(session?.docIds) ? [...session.docIds] : []
 }
 
@@ -337,7 +380,8 @@ const serializeMessages = () => {
 
 const buildSessionPayload = () => ({
   title: getSessionTitle(),
-  docIds: [...selectedDocIds.value],
+  spaceId: selectedSpaceId.value || undefined,
+  docIds: getScopedDocIds(),
   messages: serializeMessages(),
 })
 
@@ -349,7 +393,10 @@ const loadSessions = async () => {
 
 const ensureCurrentSession = async () => {
   if (currentSessionId.value) return currentSessionId.value
-  const res = await createDocumentQaSession({ docIds: selectedDocIds.value })
+  const res = await createDocumentQaSession({
+    spaceId: selectedSpaceId.value || undefined,
+    docIds: getScopedDocIds(),
+  })
   const session = res?.data ?? res ?? null
   if (!session?.id) {
     throw new Error('创建对话失败')
@@ -365,7 +412,7 @@ const saveCurrentSession = async () => {
   const payload = buildSessionPayload()
   const res = messages.value.length
     ? await syncDocumentQaSession(sessionId, payload)
-    : await updateDocumentQaSession(sessionId, { title: payload.title, docIds: payload.docIds })
+    : await updateDocumentQaSession(sessionId, { title: payload.title, spaceId: payload.spaceId, docIds: payload.docIds })
 
   const session = res?.data ?? res ?? null
   if (!session?.id) return
@@ -389,7 +436,7 @@ const persistCurrentSessionOnPageExit = () => {
   const requestBody = JSON.stringify(
     hasMessages
       ? payload
-      : { title: payload.title, docIds: payload.docIds },
+      : { title: payload.title, spaceId: payload.spaceId, docIds: payload.docIds },
   )
   const persistKey = `${currentSessionId.value}:${requestBody}`
   if (persistKey === lastExitPersistKey) return
@@ -426,6 +473,7 @@ const switchSession = async (id, options = {}) => {
   if (!session) return
 
   applyCurrentSession(session)
+  await fetchDocuments()
   await scrollToBottom()
 }
 
@@ -510,10 +558,46 @@ const toggleSidebar = () => {
 
 const fetchDocuments = async () => {
   try {
-    const res = await getDocumentList({ page: 1, pageSize: 200, status: 'success' })
+    const res = await getDocumentList({
+      page: 1,
+      pageSize: 200,
+      status: 'success',
+      spaceId: selectedSpaceId.value || undefined,
+    })
     const payload = res?.data ?? res ?? {}
     documentOptions.value = payload.list || []
+    const currentSession = currentSessionId.value
+      ? chatSessions.value.find(item => item.id === currentSessionId.value)
+      : null
+    selectedDocIds.value = currentSession?.docIds?.length
+      ? currentSession.docIds.filter(item => availableDocumentIdSet.value.has(item))
+      : getScopedDocIds()
+    if (currentSession) {
+      currentSession.docIds = [...selectedDocIds.value]
+    }
   } catch { /* ignore */ }
+}
+
+const fetchKnowledgeSpaces = async () => {
+  try {
+    const res = await getKnowledgeSpaceList({ page: 1, pageSize: 200, status: 1 })
+    const payload = res?.data ?? res ?? {}
+    knowledgeSpaceOptions.value = payload.list || []
+  } catch {
+    knowledgeSpaceOptions.value = []
+  }
+}
+
+const handleSpaceChange = async () => {
+  selectedDocIds.value = []
+  await fetchDocuments()
+  if (currentSessionId.value) {
+    try {
+      await saveCurrentSession()
+    } catch {
+      ElMessage.error('对话保存失败，请稍后重试')
+    }
+  }
 }
 
 const handleQuickPrompt = (text) => {
@@ -633,10 +717,12 @@ const handleSubmit = async () => {
 
   try {
     const history = buildHistory().slice(0, -1)
+    const scopedDocIds = getScopedDocIds()
     const res = await askDocumentQuestion({
       question: text,
       limit: 4,
-      documentIds: selectedDocIds.value.length > 0 ? selectedDocIds.value : undefined,
+      spaceId: selectedSpaceId.value || undefined,
+      documentIds: scopedDocIds.length > 0 ? scopedDocIds : undefined,
       history,
     })
     const data = res?.data || res || {}
@@ -668,10 +754,12 @@ const handleSubmit = async () => {
 
 // ---- Lifecycle ----
 onMounted(async () => {
-  fetchDocuments()
+  await fetchKnowledgeSpaces()
   await loadSessions()
   if (sortedSessions.value.length > 0) {
     await switchSession(sortedSessions.value[0].id, { skipSave: true })
+  } else {
+    await fetchDocuments()
   }
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('pagehide', handlePageHide)
@@ -1134,6 +1222,12 @@ onBeforeUnmount(() => {
   margin-bottom: 4px;
 }
 .source-item__header strong { color: #1e293b; font-size: 12px; }
+.source-item__space {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+}
 .source-item__score { margin-left: auto; }
 .source-item__preview {
   margin: 0;

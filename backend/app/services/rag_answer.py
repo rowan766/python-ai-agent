@@ -56,11 +56,14 @@ def _build_extractive_answer(question: str, hits: list[dict[str, Any]]) -> tuple
 
         document = hit.get("document") or {}
         document_title = document.get("title") or f"文档#{hit.get('documentId', '-')}"
+        space = document.get("space") or {}
         answer_segments.append(f"【{document_title}】{snippet}")
         selected_sources.append(
             {
                 "documentId": hit.get("documentId"),
                 "documentTitle": document.get("title"),
+                "spaceId": document.get("spaceId"),
+                "spaceName": space.get("name"),
                 "chunkId": hit.get("chunkId"),
                 "chunkIndex": hit.get("chunkIndex"),
                 "score": hit.get("score"),
@@ -83,8 +86,10 @@ def _build_llm_context_blocks(sources: list[dict[str, Any]]) -> list[str]:
             continue
         document_title = source.get("documentTitle") or f"文档#{source.get('documentId', '-')}"
         chunk_index = source.get("chunkIndex")
+        space_name = source.get("spaceName")
+        space_line = f"\n所属空间：{space_name}" if space_name else ""
         context_blocks.append(
-            f"来源{index}\n文档标题：{document_title}\n切片序号：{chunk_index}\n内容：{content}"
+            f"来源{index}\n文档标题：{document_title}{space_line}\n切片序号：{chunk_index}\n内容：{content}"
         )
     return context_blocks
 

@@ -36,6 +36,16 @@
                 </el-input>
               </el-form-item>
               <el-form-item>
+                <el-select v-model="searchForm.spaceId" clearable placeholder="知识空间" class="toolbar-select toolbar-select-wide">
+                  <el-option
+                    v-for="item in knowledgeSpaceOptions"
+                    :key="item.id"
+                    :label="item.name"
+                    :value="item.id"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
                 <el-select v-model="searchForm.status" clearable placeholder="处理状态" class="toolbar-select">
                   <el-option label="待处理" value="pending" />
                   <el-option label="处理中" value="processing" />
@@ -51,7 +61,16 @@
           </template>
 
           <template #actions>
+            <el-select v-model="uploadTargetSpaceId" clearable placeholder="上传到知识空间" class="toolbar-select toolbar-select-wide">
+              <el-option
+                v-for="item in knowledgeSpaceOptions"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id"
+              />
+            </el-select>
             <el-upload
+              v-permission="'knowledge:document:upload'"
               multiple
               :limit="20"
               :show-file-list="false"
@@ -89,6 +108,11 @@
           @page-current-change="handlePageChange"
         >
           <el-table-column prop="title" label="文档标题" min-width="220" show-overflow-tooltip />
+          <el-table-column label="所属空间" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.space?.name || '-' }}
+            </template>
+          </el-table-column>
           <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip />
           <el-table-column prop="mimeType" label="文件类型" min-width="170" show-overflow-tooltip />
           <el-table-column label="文件大小" width="110" align="center">
@@ -117,6 +141,7 @@
               <div class="table-actions">
                 <CrudButton style-type="primary" size-variant="table" tone="blue" :icon="View" @click="handleOpenDetail(row)">详情</CrudButton>
                 <CrudButton
+                  v-permission="'knowledge:document:reprocess'"
                   style-type="primary"
                   size-variant="table"
                   tone="green"
@@ -126,8 +151,18 @@
                 >
                   重试
                 </CrudButton>
-                <CrudButton style-type="primary" size-variant="table" tone="gray" :icon="Download" @click="handleDownload(row)">下载</CrudButton>
                 <CrudButton
+                  v-permission="'knowledge:document:download'"
+                  style-type="primary"
+                  size-variant="table"
+                  tone="gray"
+                  :icon="Download"
+                  @click="handleDownload(row)"
+                >
+                  下载
+                </CrudButton>
+                <CrudButton
+                  v-permission="'knowledge:document:delete'"
                   style-type="primary"
                   size-variant="table"
                   tone="red"
@@ -177,6 +212,7 @@
             >
               <div class="search-result-item__meta">
                 <strong>{{ item.document?.title || `文档 #${item.documentId}` }}</strong>
+                <span>空间 {{ item.document?.space?.name || '-' }}</span>
                 <span>切片 {{ item.chunkIndex }}</span>
                 <span>得分 {{ Number(item.score || 0).toFixed(4) }}</span>
               </div>
@@ -202,6 +238,7 @@
         <el-descriptions v-if="documentDetail" :column="2" border class="detail-descriptions">
           <el-descriptions-item label="文档标题">{{ documentDetail.title }}</el-descriptions-item>
           <el-descriptions-item label="文件名">{{ documentDetail.fileName }}</el-descriptions-item>
+          <el-descriptions-item label="所属空间">{{ documentDetail.space?.name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="处理状态">
             <el-tag :type="getStatusTagType(documentDetail.status)" effect="light">
               {{ getStatusText(documentDetail.status) }}
@@ -268,6 +305,7 @@
       <div class="search-preview-dialog">
         <div class="search-preview-meta">
           <span>{{ activeSearchResult?.document?.title || `文档 #${activeSearchResult?.documentId || '-'}` }}</span>
+          <span>空间 {{ activeSearchResult?.document?.space?.name || '-' }}</span>
           <span>切片 {{ activeSearchResult?.chunkIndex ?? '-' }}</span>
           <span>得分 {{ Number(activeSearchResult?.score || 0).toFixed(4) }}</span>
         </div>
@@ -306,6 +344,7 @@ import {
   reprocessDocument,
   searchDocumentChunks
 } from '../../api/document'
+import { getKnowledgeSpaceList } from '../../api/knowledge-space'
 import { downloadFileBlob, uploadFiles } from '../../api/upload'
 
 const loading = ref(false)
@@ -313,6 +352,7 @@ const searchLoading = ref(false)
 const detailLoading = ref(false)
 const detailDrawerVisible = ref(false)
 const tableData = ref([])
+const knowledgeSpaceOptions = ref([])
 const documentDetail = ref(null)
 const chunkList = ref([])
 const searchResults = ref([])
@@ -328,8 +368,10 @@ const queueStatus = reactive({
 
 const searchForm = reactive({
   keyword: '',
-  status: ''
+  status: '',
+  spaceId: undefined,
 })
+const uploadTargetSpaceId = ref(undefined)
 
 const pagination = reactive({
   page: 1,
@@ -448,7 +490,8 @@ const fetchDocumentList = async () => {
       page: pagination.page,
       pageSize: pagination.pageSize,
       keyword: searchForm.keyword || undefined,
-      status: searchForm.status || undefined
+      status: searchForm.status || undefined,
+      spaceId: searchForm.spaceId || undefined,
     })
     const { list, total } = normalizePagedList(response)
     tableData.value = list
@@ -458,6 +501,16 @@ const fetchDocumentList = async () => {
     pagination.total = 0
   } finally {
     loading.value = false
+  }
+}
+
+const fetchKnowledgeSpaceOptions = async () => {
+  try {
+    const response = await getKnowledgeSpaceList({ page: 1, pageSize: 200, status: 1 })
+    const payload = response?.data ?? response ?? {}
+    knowledgeSpaceOptions.value = payload.list || []
+  } catch {
+    knowledgeSpaceOptions.value = []
   }
 }
 
@@ -499,6 +552,7 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.keyword = ''
   searchForm.status = ''
+  searchForm.spaceId = undefined
   handleSearch()
 }
 
@@ -519,6 +573,9 @@ const handleUploadRequest = async (options) => {
   try {
     const formData = new FormData()
     formData.append('files', options.file)
+    if (uploadTargetSpaceId.value) {
+      formData.append('spaceId', uploadTargetSpaceId.value)
+    }
     const response = await uploadFiles(formData)
     const [uploaded] = normalizeResponseArray(response)
     if (!uploaded) {
@@ -636,7 +693,8 @@ const handleSemanticSearch = async () => {
   try {
     const response = await searchDocumentChunks({
       query: keyword,
-      limit: 8
+      limit: 8,
+      spaceId: searchForm.spaceId || undefined,
     })
     searchResults.value = normalizeResponseArray(response)
   } catch (error) {
@@ -675,6 +733,7 @@ const startPolling = () => {
 }
 
 onMounted(async () => {
+  await fetchKnowledgeSpaceOptions()
   await refreshAll()
   startPolling()
 })
@@ -748,6 +807,10 @@ onUnmounted(() => {
 
 .toolbar-select {
   width: 150px;
+}
+
+.toolbar-select-wide {
+  width: 190px;
 }
 
 .table-actions {
@@ -909,7 +972,8 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .toolbar-input,
-  .toolbar-select {
+  .toolbar-select,
+  .toolbar-select-wide {
     width: 100%;
   }
 

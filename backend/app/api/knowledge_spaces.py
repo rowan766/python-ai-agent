@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
 from app.core.http import paginated_response, success_response
-from app.models import Department, KnowledgeSpace, KnowledgeSpaceMember, KnowledgeSpaceShare, Role, User
+from app.models import Department, Document, KnowledgeSpace, KnowledgeSpaceMember, KnowledgeSpaceShare, Role, User
 from app.schemas import (
     ApiResponse,
     KnowledgeSpaceItem,
@@ -18,6 +18,7 @@ from app.schemas import (
     PageData,
 )
 from app.services.knowledge_space_permissions import (
+    VALID_VISIBILITY_MODES,
     build_space_access_clause,
     ensure_space_has_owner,
     normalize_permission_level,
@@ -28,7 +29,6 @@ from app.services.serializers import serialize_knowledge_space, serialize_knowle
 
 
 router = APIRouter(prefix="/knowledge-space", tags=["知识空间"])
-VALID_VISIBILITY_MODES = {"private", "department", "shared"}
 
 
 def _knowledge_space_query():
@@ -46,7 +46,7 @@ def _normalize_visibility_mode(value: str | None) -> str:
     if normalized not in VALID_VISIBILITY_MODES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="visibilityMode 仅支持 private、department、shared",
+            detail=f"visibilityMode 仅支持 {', '.join(sorted(VALID_VISIBILITY_MODES))}",
         )
     return normalized
 
@@ -127,7 +127,21 @@ def get_knowledge_space_list(
         .offset((page - 1) * pageSize)
         .limit(pageSize)
     ).unique().all()
-    return paginated_response([serialize_knowledge_space(space) for space in spaces], total, page, pageSize)
+
+    space_ids = [s.id for s in spaces]
+    doc_counts: dict[int, int] = {}
+    if space_ids:
+        rows = db.execute(
+            select(Document.space_id, func.count().label("cnt"))
+            .where(Document.space_id.in_(space_ids))
+            .group_by(Document.space_id)
+        ).all()
+        doc_counts = {row.space_id: row.cnt for row in rows}
+
+    return paginated_response(
+        [serialize_knowledge_space(space, document_count=doc_counts.get(space.id, 0)) for space in spaces],
+        total, page, pageSize,
+    )
 
 
 @router.post(
@@ -201,6 +215,29 @@ def update_knowledge_space(
     db.commit()
     space = _get_space_or_404(db, current_user, space_id, action="read")
     return success_response(serialize_knowledge_space(space, include_members=True, include_shares=True))
+
+
+@router.delete(
+    "/{space_id}",
+    summary="删除知识空间",
+    response_model=ApiResponse[None],
+)
+def delete_knowledge_space(
+    space_id: Annotated[int, Path(title="知识空间 ID", description="要删除的知识空间主键 ID")],
+    db: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    space = _get_space_or_404(db, current_user, space_id, action="manage")
+    if space.status != 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="只能删除已停用的知识空间")
+    has_documents = db.scalar(
+        select(func.count()).select_from(Document).where(Document.space_id == space_id)
+    ) or 0
+    if has_documents > 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="知识空间内还有文档，请先清空文档后再删除")
+    db.delete(space)
+    db.commit()
+    return success_response(message="知识空间已删除")
 
 
 @router.post(

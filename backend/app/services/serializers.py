@@ -185,6 +185,7 @@ def serialize_knowledge_space(
     *,
     include_members: bool = False,
     include_shares: bool = False,
+    document_count: int = 0,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "id": space.id,
@@ -198,6 +199,7 @@ def serialize_knowledge_space(
         "updatedAt": format_datetime(space.updated_at),
         "memberCount": len(space.members) if "members" in space.__dict__ else 0,
         "shareCount": len(space.shares) if "shares" in space.__dict__ else 0,
+        "documentCount": document_count,
         "creator": serialize_user(space.creator, include_relations=False) if space.creator else None,
         "ownerDepartment": serialize_department(space.owner_department) if space.owner_department else None,
     }

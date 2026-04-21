@@ -31,10 +31,8 @@ export const useUserStore = defineStore('user', {
         const res = await loginApi(credentials)
         this.token = res.data.access_token
         localStorage.setItem('token', res.data.access_token)
-        await Promise.all([
-          this.getUserProfile(),
-          this.getUserMenus({ force: true })
-        ])
+        await this.getUserProfile()
+        await this.getUserMenus({ force: true })
         return res
       } catch (error) {
         this.error = error.message || '登录失败'

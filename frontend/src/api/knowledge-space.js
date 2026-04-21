@@ -16,6 +16,10 @@ export const updateKnowledgeSpace = (id, data) => {
   return request.put(`/knowledge-space/${id}`, data)
 }
 
+export const deleteKnowledgeSpace = (id) => {
+  return request.delete(`/knowledge-space/${id}`)
+}
+
 export const saveKnowledgeSpaceMember = (spaceId, data) => {
   return request.post(`/knowledge-space/${spaceId}/members`, data)
 }

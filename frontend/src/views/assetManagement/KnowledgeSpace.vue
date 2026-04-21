@@ -66,12 +66,18 @@
         <el-table-column prop="memberCount" label="成员数" width="90" align="center" />
         <el-table-column prop="shareCount" label="共享数" width="90" align="center" />
         <el-table-column prop="updatedAt" label="更新时间" min-width="170" align="center" />
-        <el-table-column label="操作" width="260" fixed="right" align="center">
+        <el-table-column label="操作" width="300" fixed="right" align="center">
           <template #default="{ row }">
             <div class="table-actions">
               <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
               <el-button link type="primary" @click="handleOpenDetail(row)">详情</el-button>
               <el-button v-permission="'knowledge:space:share'" link type="warning" @click="handleManage(row)">成员共享</el-button>
+              <el-button
+                v-if="row.status === 0 && (row.documentCount ?? 0) === 0"
+                link
+                type="danger"
+                @click="handleDeleteSpace(row)"
+              >删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -121,9 +127,11 @@
           <el-col :span="12">
             <el-form-item label="可见性" prop="visibilityMode">
               <el-select v-model="formData.visibilityMode" style="width: 100%">
-                <el-option label="仅成员可见" value="private" />
+                <el-option label="仅知识空间成员可见" value="private" />
                 <el-option label="同部门可见" value="department" />
+                <el-option label="同部门及下属部门可见" value="department_tree" />
                 <el-option label="按共享可见" value="shared" />
+                <el-option label="全体成员可见" value="all" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -314,6 +322,7 @@ import { Collection, Plus, Search } from '@element-plus/icons-vue'
 import { getDepartmentList } from '../../api/department'
 import {
   createKnowledgeSpace,
+  deleteKnowledgeSpace,
   deleteKnowledgeSpaceMember,
   deleteKnowledgeSpaceShare,
   getKnowledgeSpaceDetail,
@@ -404,9 +413,11 @@ const normalizePagedList = (response) => {
 
 const getVisibilityText = (mode) => {
   const map = {
-    private: '仅成员可见',
+    private: '仅知识空间成员可见',
     department: '同部门可见',
+    department_tree: '同部门及下属部门可见',
     shared: '按共享可见',
+    all: '全体成员可见',
   }
   return map[mode] || mode || '-'
 }
@@ -415,7 +426,9 @@ const getVisibilityTagType = (mode) => {
   const map = {
     private: 'info',
     department: 'success',
+    department_tree: 'success',
     shared: 'warning',
+    all: 'primary',
   }
   return map[mode] || 'info'
 }
@@ -685,6 +698,26 @@ const handleDeleteShare = async (row) => {
   await deleteKnowledgeSpaceShare(activeSpaceDetail.value.id, row.id)
   ElMessage.success('共享配置已删除')
   await fetchDetail(activeSpaceDetail.value.id)
+  await fetchSpaceList()
+}
+
+const handleDeleteSpace = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除知识空间「${row.name}」吗？此操作不可恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    return
+  }
+  await deleteKnowledgeSpace(row.id)
+  ElMessage.success('知识空间已删除')
   await fetchSpaceList()
 }
 

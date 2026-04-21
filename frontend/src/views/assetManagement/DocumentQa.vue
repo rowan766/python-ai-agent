@@ -132,7 +132,7 @@
                   <template v-if="msg.role === 'assistant'">
                     <el-tag v-if="msg.answerMode === 'llm-rag'" type="primary" effect="plain" size="small">{{ msg.answerModel || 'LLM' }}</el-tag>
                     <el-tag v-else type="info" effect="plain" size="small">检索摘要</el-tag>
-                    <span v-if="msg.sources?.length" class="source-count">{{ msg.sources.length }} 条来源</span>
+                    <span v-if="msg.sources?.length" class="source-count">{{ getMatchedFileCount(msg.sources) }} 个文件 · {{ msg.sources.length }} 条切片</span>
                   </template>
                   <span v-else class="msg-time">{{ formatTime(msg.timestamp) }}</span>
                 </span>
@@ -153,28 +153,41 @@
                 </div>
                 <div v-else class="answer-md" v-html="renderMarkdown(msg.content)"></div>
 
-                <!-- 来源引用折叠区（默认收起） -->
-                <div v-if="hasSources(msg, idx)" class="sources-inline">
-                  <button class="sources-toggle" @click="toggleSources(msg)">
-                    <el-icon><DocumentCopy /></el-icon>
-                    引用来源 {{ msg._sourcesExpanded ? '\u25BC' : '\u25B6' }}
-                    ({{ msg.sources.length }})
+                <!-- 匹配文件折叠区（默认收起，知识库未匹配到则不展示） -->
+                <div v-if="hasSources(msg, idx)" class="matched-files-inline">
+                  <button class="matched-files-toggle" @click="toggleMatchedFiles(msg)">
+                    <el-icon><FolderOpened /></el-icon>
+                    匹配文件 {{ msg._matchedFilesExpanded ? '\u25BC' : '\u25B6' }}
+                    ({{ getMatchedFileCount(msg.sources) }} 个文件 · {{ msg.sources.length }} 条切片)
                   </button>
                   <transition name="slide">
-                    <div v-show="msg._sourcesExpanded" class="sources-list">
+                    <div v-show="msg._matchedFilesExpanded" class="matched-files-list">
                       <div
-                        v-for="(src, si) in msg.sources"
-                        :key="`${src.chunkId}-${si}-${idx}`"
-                        class="source-item"
-                        @click="openSourcePreview(src)"
+                        v-for="(file, fi) in getAggregatedFiles(msg.sources)"
+                        :key="`file-${fi}-${idx}`"
+                        class="matched-file-card"
                       >
-                        <div class="source-item__header">
-                          <strong>{{ src.documentTitle || `文档 #${src.documentId}` }}</strong>
-                          <span v-if="src.spaceName" class="source-item__space">{{ src.spaceName }}</span>
-                          <span class="source-item__score">{{ Number(src.score || 0).toFixed(4) }}</span>
-                          <span class="source-item__index">切片 {{ src.chunkIndex ?? '-' }}</span>
+                        <div class="matched-file-card__header" @click="toggleFileDetail(file)">
+                          <el-icon class="matched-file-card__icon"><DocumentCopy /></el-icon>
+                          <strong class="matched-file-card__title">{{ file.documentTitle || `文档 #${file.documentId}` }}</strong>
+                          <span v-if="file.spaceName" class="matched-file-card__space">{{ file.spaceName }}</span>
+                          <span class="matched-file-card__chunks">{{ file.chunkCount }} 条切片</span>
+                          <el-icon class="matched-file-card__arrow" :class="{ expanded: file._expanded }"><ArrowDown /></el-icon>
                         </div>
-                        <p class="source-item__preview">{{ getSourcePreview(src.content) }}</p>
+                        <transition name="slide">
+                          <div v-show="file._expanded" class="matched-file-card__chunks-detail">
+                            <div
+                              v-for="(src, ci) in file.chunks"
+                              :key="`${src.chunkId}-${ci}-${idx}`"
+                              class="chunk-item"
+                              @click="openSourcePreview(src)"
+                            >
+                              <span class="chunk-item__index">切片 {{ src.chunkIndex ?? '-' }}</span>
+                              <span class="chunk-item__score">相关度 {{ Number(src.score || 0).toFixed(2) }}</span>
+                              <p class="chunk-item__preview">{{ getSourcePreview(src.content) }}</p>
+                            </div>
+                          </div>
+                        </transition>
                       </div>
                     </div>
                   </transition>
@@ -242,6 +255,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  ArrowDown,
   ChatDotRound,
   Clock,
   Close,
@@ -249,6 +263,7 @@ import {
   DocumentCopy,
   Expand,
   Fold,
+  FolderOpened,
   Loading,
   Monitor,
   Promotion,
@@ -605,8 +620,38 @@ const handleQuickPrompt = (text) => {
   nextTick(() => inputRef.value?.focus())
 }
 
-const toggleSources = (msg) => {
-  msg._sourcesExpanded = !msg._sourcesExpanded
+const toggleMatchedFiles = (msg) => {
+  msg._matchedFilesExpanded = !msg._matchedFilesExpanded
+}
+
+const getAggregatedFiles = (sources) => {
+  const fileMap = {}
+  for (const src of sources) {
+    const docId = src.documentId
+    if (!fileMap[docId]) {
+      fileMap[docId] = {
+        documentId: src.documentId,
+        documentTitle: src.documentTitle,
+        spaceName: src.spaceName || '',
+        chunks: [],
+        chunkCount: 0,
+        _expanded: false,
+      }
+    }
+    fileMap[docId].chunks.push(src)
+    fileMap[docId].chunkCount++
+  }
+  return Object.values(fileMap)
+}
+
+const getMatchedFileCount = (sources) => {
+  const ids = new Set()
+  for (const src of sources) ids.add(src.documentId)
+  return ids.size
+}
+
+const toggleFileDetail = (file) => {
+  file._expanded = !file._expanded
 }
 
 const getSourcePreview = (content = '') => {
@@ -1181,13 +1226,13 @@ onBeforeUnmount(() => {
 .spin-loading { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Sources inline */
-.sources-inline { margin-top: 12px; }
-.sources-toggle {
+/* Sources / Matched Files inline */
+.matched-files-inline { margin-top: 12px; }
+.matched-files-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 5px 14px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
@@ -1196,44 +1241,106 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: all 0.18s;
 }
-.sources-toggle:hover { background: #f8fafc; border-color: #cbd5e1; }
+.matched-files-toggle:hover { background: #f8fafc; border-color: #cbd5e1; }
 
-.sources-list {
+.matched-files-list {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.source-item {
-  padding: 10px 12px;
+
+.matched-file-card {
   border: 1px solid #e8ecf2;
   border-radius: 10px;
   background: #fbfdff;
-  cursor: pointer;
+  overflow: hidden;
   transition: all 0.16s;
 }
-.source-item:hover { border-color: #bfdbfe; background: #f0f7ff; }
-.source-item__header {
+.matched-file-card:hover { border-color: #bfdbfe; }
+
+.matched-file-card__header {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  font-size: 11px;
-  color: #64748b;
-  margin-bottom: 4px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.source-item__header strong { color: #1e293b; font-size: 12px; }
-.source-item__space {
+.matched-file-card__header:hover { background: #f0f7ff; }
+
+.matched-file-card__icon { color: #3b82f6; flex-shrink: 0; }
+.matched-file-card__title {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.matched-file-card__space {
   padding: 1px 8px;
   border-radius: 999px;
   background: #eff6ff;
   color: #2563eb;
+  font-size: 11px;
+  flex-shrink: 0;
 }
-.source-item__score { margin-left: auto; }
-.source-item__preview {
+.matched-file-card__chunks {
+  color: #94a3b8;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.matched-file-card__arrow {
+  color: #94a3b8;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: transform 0.22s ease;
+}
+.matched-file-card__arrow.expanded { transform: rotate(180deg); }
+
+.matched-file-card__chunks-detail {
+  padding: 0 12px 10px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chunk-item {
+  padding: 8px 10px;
+  border: 1px solid #f0f2f7;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.chunk-item:hover { border-color: #dbeafe; background: #f8fafc; }
+
+.chunk-item__index {
+  font-size: 11px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+.chunk-item__score {
+  font-size: 11px;
+  color: #10b981;
+  background: #ecfdf5;
+  padding: 0 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.chunk-item__preview {
+  width: 100%;
   margin: 0;
   font-size: 12px;
   color: #475569;
-  line-height: 1.7;
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
 }

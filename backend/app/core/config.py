@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     retrieval_candidate_limit: int = 24
     retrieval_keyword_weight: float = 0.22
     retrieval_exact_match_bonus: float = 0.08
+    retrieval_relevance_threshold: float = 0.3
     rag_answer_max_chunks: int = 4
     rag_answer_max_context_chars: int = 2400
     llm_provider: str = "dashscope"

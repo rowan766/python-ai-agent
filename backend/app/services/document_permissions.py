@@ -1,31 +1,35 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 
-from app.models import Department, Document, KnowledgeSpace, Role, RoleDepartment, User, UserRole
-from app.services.knowledge_space_permissions import build_space_access_clause
+from app.models import Department, Document, KnowledgeSpace, Role, RoleDepartment, User
+from app.services.knowledge_space_permissions import build_space_access_clause, get_current_user_role_ids
 
 
 def _collect_descendant_department_ids(db, root_department_ids: list[int]) -> set[int]:
-    pending = {department_id for department_id in root_department_ids if department_id}
-    collected: set[int] = set()
+    roots = [d for d in root_department_ids if d]
+    if not roots:
+        return set()
 
-    while pending:
-        current_batch = pending - collected
-        if not current_batch:
-            break
-        collected.update(current_batch)
-        child_ids = set(
-            db.scalars(select(Department.id).where(Department.parent_id.in_(sorted(current_batch)))).all()
-        )
-        pending.update(child_ids)
-
-    return collected
+    # 用单条递归 CTE 替代逐层循环查询
+    placeholders = ", ".join(str(i) for i in roots)
+    result = db.execute(
+        text(f"""
+            WITH RECURSIVE dept_tree AS (
+                SELECT id FROM sys_department WHERE id IN ({placeholders})
+                UNION ALL
+                SELECT d.id FROM sys_department d
+                INNER JOIN dept_tree dt ON d.parent_id = dt.id
+            )
+            SELECT id FROM dept_tree
+        """)
+    )
+    return {row[0] for row in result}
 
 
 def _build_legacy_document_permission_clause(db, current_user, *, action: str = "read") -> object | None:
-    role_ids = db.scalars(select(UserRole.role_id).where(UserRole.user_id == current_user.id)).all()
+    role_ids = get_current_user_role_ids(db, current_user)
     if action in {"write", "manage", "share"}:
         if not role_ids:
             return Document.user_id == current_user.id

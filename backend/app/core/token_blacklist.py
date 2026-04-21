@@ -34,14 +34,13 @@ def add_token_to_blacklist(token: str) -> bool:
             logger.warning("无法解析 token，跳过加入黑名单")
             return False
 
-        # 计算 token 剩余有效期
-        exp = payload.get("exp")
-        if not exp:
-            logger.warning("token 没有过期时间，使用默认 TTL")
-            ttl = settings.access_token_ttl_seconds
+        # 根据 token 签发时间计算剩余有效期
+        ts = payload.get("ts")
+        if ts:
+            elapsed = int(datetime.now(timezone.utc).timestamp()) - ts
+            ttl = max(settings.access_token_ttl_seconds - elapsed, 60)
         else:
-            now = datetime.now(timezone.utc).timestamp()
-            ttl = max(int(exp - now), 60)  # 至少保留 60 秒
+            ttl = settings.access_token_ttl_seconds
 
         # 将 token 加入黑名单，设置过期时间
         key = _get_blacklist_key(token)

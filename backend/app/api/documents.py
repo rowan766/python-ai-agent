@@ -605,12 +605,9 @@ def reprocess_document(
         .limit(1)
     )
     if latest_task and latest_task.status in {"pending", "processing"} and not payload.force:
-        return success_response(
-            {
-                "document": serialize_document(document, include_tasks=True),
-                "task": serialize_document_task(latest_task),
-            },
-            message="当前文档已有处理中任务",
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="当前文档已有处理中任务，如需强制重处理请传入 force=true",
         )
 
     task = DocumentTask(

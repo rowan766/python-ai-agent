@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
@@ -178,7 +178,7 @@ def set_role_menus(
 ) -> dict:
     role = _get_role_or_404(db, role_id)
     menu_ids = sorted(set(payload.menuIds))
-    db.query(RoleMenu).filter(RoleMenu.role_id == role.id).delete()
+    db.execute(delete(RoleMenu).where(RoleMenu.role_id == role.id))
     for menu_id in menu_ids:
         db.add(RoleMenu(role_id=role.id, menu_id=menu_id))
     db.commit()
@@ -203,7 +203,7 @@ def set_role_data_scope(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="存在无效的部门ID")
 
     role.data_scope = payload.dataScope
-    db.query(RoleDepartment).filter(RoleDepartment.role_id == role.id).delete()
+    db.execute(delete(RoleDepartment).where(RoleDepartment.role_id == role.id))
     for department_id in sorted(set(payload.departmentIds)):
         db.add(RoleDepartment(role_id=role.id, department_id=department_id))
     db.commit()

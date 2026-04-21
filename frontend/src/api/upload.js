@@ -1,11 +1,11 @@
 import request from '../utils/request'
 
 export const uploadImages = (formData) => {
-  return request.post('/upload/images', formData)
+  return request.post('/upload/images', formData, { timeout: 120000 })
 }
 
 export const uploadFiles = (formData) => {
-  return request.post('/upload/files', formData)
+  return request.post('/upload/files', formData, { timeout: 120000 })
 }
 
 export const downloadFileBlob = (id) => {

@@ -370,7 +370,11 @@ class DocumentTask(Base, TimestampMixin):
 
 class DocumentChunk(Base, TimestampMixin):
     __tablename__ = "sys_document_chunk"
-    __table_args__ = (UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk_index"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk_index"),
+        Index("idx_document_chunk_document_id", "document_id"),
+        Index("idx_document_chunk_task_id", "task_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("sys_document.id", ondelete="CASCADE"))
@@ -389,6 +393,10 @@ class DocumentChunk(Base, TimestampMixin):
 
 class DocumentQaSession(Base, TimestampMixin):
     __tablename__ = "sys_document_qa_session"
+    __table_args__ = (
+        Index("idx_document_qa_session_user_id", "user_id"),
+        Index("idx_document_qa_session_space_id", "space_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("sys_user.id", ondelete="CASCADE"))

@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
@@ -269,7 +269,7 @@ def assign_user_roles(
         if found_ids != role_ids:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="存在无效的角色ID")
 
-    db.query(UserRole).filter(UserRole.user_id == user.id).delete()
+    db.execute(delete(UserRole).where(UserRole.user_id == user.id))
     for role_id in role_ids:
         db.add(UserRole(user_id=user.id, role_id=role_id))
     db.commit()

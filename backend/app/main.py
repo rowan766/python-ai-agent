@@ -21,6 +21,7 @@ from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.schema_sync import ensure_runtime_schema
 from app.core.redis_client import get_redis_client
+from app.services.document_processor import get_ocr_engine
 from app.services.object_storage import ensure_minio_bucket
 from app.services.qdrant_vector_store import QdrantUnavailableError, ensure_qdrant_collection
 from app.services.seed import seed_database
@@ -82,6 +83,7 @@ async def lifespan(_app: FastAPI):
     else:
         print("Qdrant 状态: 未连接，后端可正常运行，但向量检索暂不可用")
     yield
+    get_ocr_engine.cache_clear()
 
 
 app = FastAPI(

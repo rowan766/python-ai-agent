@@ -14,8 +14,7 @@ logger = logging.getLogger("app.rag_answer")
 settings = get_settings()
 _sentence_split_pattern = re.compile(r"(?<=[。！？!?；;\n])")
 
-# 相关性阈值：低于此分数认为检索结果不相关
-RELEVANCE_THRESHOLD = 0.3
+RELEVANCE_THRESHOLD = settings.retrieval_relevance_threshold
 
 
 def _split_sentences(text: str) -> list[str]:

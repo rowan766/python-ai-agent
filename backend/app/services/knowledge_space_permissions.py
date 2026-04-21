@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 
 from app.models import KnowledgeSpace, KnowledgeSpaceMember, KnowledgeSpaceShare, Role, UserRole
 
@@ -23,6 +23,7 @@ PERMISSION_LEVEL_ORDER = {
 VALID_SPACE_ROLES = set(SPACE_ROLE_ACTIONS.keys())
 VALID_PERMISSION_LEVELS = set(PERMISSION_LEVEL_ORDER.keys())
 VALID_SHARE_TARGET_TYPES = {"department", "role", "user"}
+VALID_VISIBILITY_MODES = {"private", "department", "department_tree", "shared", "all"}
 DEFAULT_SPACE_NAME = "默认知识空间"
 
 
@@ -100,13 +101,40 @@ def build_space_access_clause(db, current_user, *, action: str = "read") -> obje
             )
         )
 
-    if action == "read" and current_user.department_id:
-        clauses.append(
-            and_(
-                KnowledgeSpace.visibility_mode == "department",
-                KnowledgeSpace.owner_department_id == current_user.department_id,
+    if action == "read":
+        # 全体成员可见：任何登录用户均可读取
+        clauses.append(KnowledgeSpace.visibility_mode == "all")
+
+        if current_user.department_id:
+            # 同部门可见：归属部门与当前用户部门精确匹配
+            clauses.append(
+                and_(
+                    KnowledgeSpace.visibility_mode == "department",
+                    KnowledgeSpace.owner_department_id == current_user.department_id,
+                )
             )
-        )
+            # 同部门及下属部门可见：用递归 CTE 查出归属部门的所有上级，
+            # 只要当前用户的部门在某空间归属部门的子树内，就放行
+            ancestor_ids_result = db.execute(
+                text("""
+                    WITH RECURSIVE dept_ancestors AS (
+                        SELECT id, parent_id FROM sys_department WHERE id = :dept_id
+                        UNION ALL
+                        SELECT d.id, d.parent_id FROM sys_department d
+                        INNER JOIN dept_ancestors da ON d.id = da.parent_id
+                    )
+                    SELECT id FROM dept_ancestors
+                """),
+                {"dept_id": current_user.department_id},
+            )
+            ancestor_ids = [row[0] for row in ancestor_ids_result]
+            if ancestor_ids:
+                clauses.append(
+                    and_(
+                        KnowledgeSpace.visibility_mode == "department_tree",
+                        KnowledgeSpace.owner_department_id.in_(ancestor_ids),
+                    )
+                )
 
     return or_(*clauses)
 

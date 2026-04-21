@@ -439,9 +439,12 @@ onBeforeUnmount(() => {
 }
 
 .layout-aside {
-  background: linear-gradient(180deg, #2b384b 0%, #243143 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 14px 0 32px rgba(15, 23, 42, 0.08);
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(0, 200, 185, 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 100% 100%, rgba(0, 120, 200, 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, #0b2535 0%, #0d2e42 40%, #091e2e 100%);
+  border-right: 1px solid rgba(0, 210, 195, 0.08);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
   transition: width 0.28s ease;
 }
 
@@ -460,10 +463,10 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%);
+  background: linear-gradient(135deg, #00c6b8 0%, #0088cc 100%);
   color: #fff;
   font-size: 16px;
-  box-shadow: 0 10px 20px rgba(47, 126, 247, 0.25);
+  box-shadow: 0 6px 18px rgba(0, 198, 184, 0.40);
 }
 
 .brand-copy {
@@ -518,9 +521,9 @@ onBeforeUnmount(() => {
 }
 
 :deep(.el-menu-item.is-active) {
-  background: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%) !important;
+  background: linear-gradient(135deg, #00c0b4 0%, #0088cc 100%) !important;
   color: #ffffff !important;
-  box-shadow: 0 10px 22px rgba(47, 126, 247, 0.2);
+  box-shadow: 0 6px 18px rgba(0, 180, 170, 0.30);
 }
 
 :deep(.el-sub-menu .el-menu-item) {
@@ -530,9 +533,9 @@ onBeforeUnmount(() => {
 }
 
 :deep(.el-sub-menu .el-menu-item.is-active) {
-  background: rgba(79, 157, 255, 0.18) !important;
+  background: rgba(0, 196, 180, 0.18) !important;
   color: #ffffff !important;
-  box-shadow: inset 3px 0 0 #74b4ff;
+  box-shadow: inset 3px 0 0 #00d4c8;
 }
 
 :deep(.el-sub-menu__icon-arrow) {
@@ -647,7 +650,7 @@ onBeforeUnmount(() => {
 .user-button:focus-visible,
 .route-tab:focus-visible,
 .tab-context-item:focus-visible {
-  outline: 2px solid rgba(47, 126, 247, 0.18);
+  outline: 2px solid rgba(0, 185, 175, 0.28);
   outline-offset: 1px;
 }
 
@@ -724,7 +727,7 @@ onBeforeUnmount(() => {
 
 .route-tab--active {
   color: #fff;
-  background: linear-gradient(135deg, #4f9dff 0%, #2f7ef7 100%);
+  background: linear-gradient(135deg, #00b8b0 0%, #0088cc 100%);
   border-color: transparent;
 }
 

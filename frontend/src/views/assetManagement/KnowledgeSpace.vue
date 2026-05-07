@@ -73,7 +73,7 @@
               <el-button link type="primary" @click="handleOpenDetail(row)">详情</el-button>
               <el-button v-permission="'knowledge:space:share'" link type="warning" @click="handleManage(row)">成员共享</el-button>
               <el-button
-                v-if="row.status === 0 && (row.documentCount ?? 0) === 0"
+                v-if="(row.status === 0 || row.createdBy === userStore.userInfo?.id) && (row.documentCount ?? 0) === 0"
                 link
                 type="danger"
                 @click="handleDeleteSpace(row)"
@@ -319,6 +319,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, Plus, Search } from '@element-plus/icons-vue'
+import { useUserStore } from '../../stores/user'
 import { getDepartmentList } from '../../api/department'
 import {
   createKnowledgeSpace,
@@ -334,6 +335,7 @@ import {
 import { getRoleList } from '../../api/role'
 import { getUserList } from '../../api/user'
 
+const userStore = useUserStore()
 const loading = ref(false)
 const detailLoading = ref(false)
 const submitLoading = ref(false)

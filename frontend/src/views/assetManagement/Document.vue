@@ -61,25 +61,7 @@
           </template>
 
           <template #actions>
-            <el-select v-model="uploadTargetSpaceId" clearable placeholder="上传到知识空间" class="toolbar-select toolbar-select-wide">
-              <el-option
-                v-for="item in knowledgeSpaceOptions"
-                :key="item.id"
-                :label="item.name"
-                :value="item.id"
-              />
-            </el-select>
-            <el-upload
-              v-permission="'knowledge:document:upload'"
-              multiple
-              :limit="20"
-              :show-file-list="false"
-              :http-request="handleUploadRequest"
-              :before-upload="beforeFileUpload"
-              :on-exceed="handleUploadExceed"
-            >
-              <CrudButton tone="blue" :icon="UploadFilled">上传文档</CrudButton>
-            </el-upload>
+            <CrudButton v-permission="'knowledge:document:upload'" tone="blue" :icon="UploadFilled" @click="uploadDialogVisible = true">上传文档</CrudButton>
             <CrudButton tone="gray" :icon="RefreshRight" @click="refreshAll">刷新状态</CrudButton>
           </template>
         </CrudToolbar>
@@ -122,7 +104,10 @@
           </el-table-column>
           <el-table-column label="处理状态" width="110" align="center">
             <template #default="{ row }">
-              <el-tag :type="getStatusTagType(row.status)" effect="light">{{ getStatusText(row.status) }}</el-tag>
+              <el-tooltip v-if="row.status === 'failed' && row.errorMessage" :content="row.errorMessage" placement="top" :show-after="300">
+                <el-tag :type="getStatusTagType(row.status)" effect="light" style="cursor: help;">{{ getStatusText(row.status) }}</el-tag>
+              </el-tooltip>
+              <el-tag v-else :type="getStatusTagType(row.status)" effect="light">{{ getStatusText(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="解析反馈" width="140" align="center">
@@ -298,21 +283,57 @@
     </el-drawer>
 
     <el-dialog
-      v-model="searchPreviewVisible"
-      title="切片完整内容"
-      width="720px"
+      v-model="uploadDialogVisible"
+      title="上传文档"
+      width="580px"
+      :close-on-click-modal="false"
+      @closed="handleUploadDialogClosed"
     >
-      <div class="search-preview-dialog">
-        <div class="search-preview-meta">
-          <span>{{ activeSearchResult?.document?.title || `文档 #${activeSearchResult?.documentId || '-'}` }}</span>
-          <span>空间 {{ activeSearchResult?.document?.space?.name || '-' }}</span>
-          <span>切片 {{ activeSearchResult?.chunkIndex ?? '-' }}</span>
-          <span>得分 {{ Number(activeSearchResult?.score || 0).toFixed(4) }}</span>
-        </div>
-        <el-scrollbar max-height="420px" class="search-preview-scroll">
-          <pre class="search-preview-text">{{ activeSearchResult?.content || '' }}</pre>
-        </el-scrollbar>
-      </div>
+      <el-form ref="uploadFormRef" :model="uploadForm" :rules="uploadFormRules" label-position="top">
+        <el-form-item label="知识空间" prop="spaceId">
+          <el-select
+            v-model="uploadForm.spaceId"
+            placeholder="请选择目标知识空间"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in knowledgeSpaceOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="选择文件" required>
+          <div class="upload-drag-wrapper">
+            <el-upload
+              ref="uploadFileRef"
+              multiple
+              :limit="20"
+              :auto-upload="false"
+              :on-change="handleUploadFileChange"
+              :on-remove="handleUploadFileRemove"
+              :before-upload="beforeFileUpload"
+              :on-exceed="handleUploadExceed"
+              drag
+            >
+              <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+              <div class="el-upload__text">将文件拖到此处，或<em>点击选择</em></div>
+              <template #tip>
+                <div class="el-upload__tip">支持 txt / pdf / docx / xlsx / pptx / 图片等格式，单个文件不超过 100MB，最多 20 个文件</div>
+              </template>
+            </el-upload>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="uploadDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="uploadSubmitting" :disabled="uploadFileList.length === 0" @click="handleSubmitUpload">
+            确认上传 ({{ uploadFileList.length }})
+          </el-button>
+        </span>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -371,7 +392,17 @@ const searchForm = reactive({
   status: '',
   spaceId: undefined,
 })
-const uploadTargetSpaceId = ref(undefined)
+const uploadDialogVisible = ref(false)
+const uploadSubmitting = ref(false)
+const uploadFileRef = ref(null)
+const uploadFormRef = ref(null)
+const uploadFileList = ref([])
+const uploadForm = reactive({
+  spaceId: undefined,
+})
+const uploadFormRules = {
+  spaceId: [{ required: true, message: '请选择知识空间', trigger: 'change' }],
+}
 
 const pagination = reactive({
   page: 1,
@@ -386,7 +417,12 @@ const chunkPagination = reactive({
 })
 
 const currentDetailDocumentId = ref(null)
+const wsConnected = ref(false)
 let pollingTimer = null
+let fastPollingTimer = null
+let ws = null
+let wsReconnectTimer = null
+let wsMounted = false
 
 const hasProcessingDocuments = computed(() => tableData.value.some((item) => ['pending', 'processing'].includes(item.status)))
 const queueModeLabel = computed(() => {
@@ -445,7 +481,10 @@ const getParseModeText = (parseMode) => {
     text_direct: '文本提取成功',
     pdf_text: 'PDF 文本提取成功',
     pdf_ocr_fallback: 'OCR 回退成功',
-    image_ocr: 'OCR 识别成功'
+    image_ocr: 'OCR 识别成功',
+    docx_text: 'Word 提取成功',
+    excel_text: 'Excel 提取成功',
+    pptx_text: 'PPT 提取成功',
   }
   return parseModeMap[parseMode] || parseMode || '-'
 }
@@ -456,7 +495,10 @@ const getParseModeTagType = (parseMode) => {
     text_direct: 'success',
     pdf_text: 'success',
     pdf_ocr_fallback: 'warning',
-    image_ocr: 'primary'
+    image_ocr: 'primary',
+    docx_text: 'success',
+    excel_text: 'success',
+    pptx_text: 'success',
   }
   return parseModeTypeMap[parseMode] || 'info'
 }
@@ -569,23 +611,71 @@ const handleUploadExceed = () => {
   ElMessage.warning('最多一次选择 20 个文件')
 }
 
-const handleUploadRequest = async (options) => {
+const stopFastPolling = () => {
+  if (fastPollingTimer !== null) {
+    window.clearInterval(fastPollingTimer)
+    fastPollingTimer = null
+  }
+}
+
+const startFastPolling = () => {
+  stopFastPolling()
+  let rounds = 0
+  fastPollingTimer = window.setInterval(async () => {
+    rounds++
+    await fetchQueueStatus()
+    await fetchDocumentList()
+    if (detailDrawerVisible.value && currentDetailDocumentId.value) {
+      await fetchDocumentDetail(currentDetailDocumentId.value)
+    }
+    const settled = !hasProcessingDocuments.value && queueStatus.pendingCount === 0
+    if (settled || rounds >= 20) {
+      stopFastPolling()
+    }
+  }, 3000)
+}
+
+const handleUploadFileChange = (file, fileList) => {
+  uploadFileList.value = fileList.map(f => f.raw || f)
+}
+
+const handleUploadFileRemove = (file, fileList) => {
+  uploadFileList.value = fileList.map(f => f.raw || f)
+}
+
+const handleUploadDialogClosed = () => {
+  uploadFileList.value = []
+  uploadForm.spaceId = undefined
+  if (uploadFileRef.value) {
+    uploadFileRef.value.clearFiles()
+  }
+}
+
+const handleSubmitUpload = async () => {
+  if (!uploadFileList.value.length) return
+  try {
+    await uploadFormRef.value?.validate()
+  } catch {
+    return
+  }
+  uploadSubmitting.value = true
   try {
     const formData = new FormData()
-    formData.append('files', options.file)
-    if (uploadTargetSpaceId.value) {
-      formData.append('spaceId', uploadTargetSpaceId.value)
+    uploadFileList.value.forEach(file => { formData.append('files', file) })
+    if (uploadForm.spaceId) {
+      formData.append('spaceId', uploadForm.spaceId)
     }
     const response = await uploadFiles(formData)
-    const [uploaded] = normalizeResponseArray(response)
-    if (!uploaded) {
-      throw new Error('文档上传失败')
-    }
-    ElMessage.success(`文档 ${uploaded.name} 已上传并入队`)
+    const uploaded = normalizeResponseArray(response)
+    if (!uploaded.length) throw new Error('文档上传失败')
+    ElMessage.success(`已上传 ${uploaded.length} 个文件并入库`)
+    uploadDialogVisible.value = false
     await refreshAll()
-    options.onSuccess?.(uploaded)
+    if (!wsConnected.value) startFastPolling()
   } catch (error) {
-    options.onError?.(error)
+    // error handled by interceptor
+  } finally {
+    uploadSubmitting.value = false
   }
 }
 
@@ -723,25 +813,108 @@ const handlePageChange = () => {
 const startPolling = () => {
   pollingTimer = window.setInterval(async () => {
     await fetchQueueStatus()
-    if (queueStatus.pendingCount > 0 || hasProcessingDocuments.value) {
+    // WebSocket 已连接时只刷新队列状态；断连时兜底刷列表
+    if (!wsConnected.value && (queueStatus.pendingCount > 0 || hasProcessingDocuments.value)) {
       await fetchDocumentList()
       if (detailDrawerVisible.value && currentDetailDocumentId.value) {
         await fetchDocumentDetail(currentDetailDocumentId.value)
       }
     }
-  }, 12000)
+  }, 15000)
+}
+
+const handleDocumentStatusChange = async (message) => {
+  // 先在内存中更新该文档状态，不等接口返回就立刻让用户看到变化
+  const idx = tableData.value.findIndex((d) => d.id === message.documentId)
+  if (idx !== -1) {
+    tableData.value[idx] = {
+      ...tableData.value[idx],
+      status: message.status,
+      errorMessage: message.errorMessage || null,
+    }
+  }
+  await fetchQueueStatus()
+  // 成功时拉一次完整列表（更新 chunkCount / textLength 等字段）
+  if (message.status === 'success') {
+    await fetchDocumentList()
+  }
+  if (detailDrawerVisible.value && currentDetailDocumentId.value === message.documentId) {
+    await fetchDocumentDetail(message.documentId)
+  }
+}
+
+const buildWsUrl = () => {
+  const token = localStorage.getItem('token') || ''
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const apiBase = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+  const wsBase = /^https?:\/\//.test(apiBase)
+    ? apiBase.replace(/^http/, 'ws')
+    : `${protocol}//${window.location.host}${apiBase}`
+  return `${wsBase}/ws/documents?token=${encodeURIComponent(token)}`
+}
+
+const connectWebSocket = () => {
+  if (!wsMounted) return
+  if (ws && ws.readyState <= WebSocket.OPEN) return
+  const token = localStorage.getItem('token') || ''
+  if (!token) return
+
+  ws = new WebSocket(buildWsUrl())
+
+  ws.onopen = () => {
+    wsConnected.value = true
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer)
+      wsReconnectTimer = null
+    }
+  }
+
+  ws.onmessage = async (event) => {
+    try {
+      const message = JSON.parse(event.data)
+      if (message.type === 'document_status_changed') {
+        await handleDocumentStatusChange(message)
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  ws.onclose = () => {
+    wsConnected.value = false
+    ws = null
+    if (wsMounted) {
+      wsReconnectTimer = setTimeout(connectWebSocket, 5000)
+    }
+  }
+
+  ws.onerror = () => { ws?.close() }
+}
+
+const disconnectWebSocket = () => {
+  wsMounted = false
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer)
+    wsReconnectTimer = null
+  }
+  if (ws) {
+    ws.onclose = null
+    ws.close()
+    ws = null
+  }
+  wsConnected.value = false
 }
 
 onMounted(async () => {
+  wsMounted = true
   await fetchKnowledgeSpaceOptions()
   await refreshAll()
   startPolling()
+  connectWebSocket()
 })
 
 onUnmounted(() => {
-  if (pollingTimer) {
-    window.clearInterval(pollingTimer)
-  }
+  if (pollingTimer) window.clearInterval(pollingTimer)
+  stopFastPolling()
+  disconnectWebSocket()
 })
 </script>
 
@@ -980,5 +1153,32 @@ onUnmounted(() => {
   .search-card__actions {
     flex-wrap: wrap;
   }
+}
+
+/* 上传弹窗样式 */
+.upload-drag-wrapper {
+  width: 100%;
+}
+
+.upload-drag-wrapper :deep(.el-upload-dragger) {
+  border-radius: 12px;
+  padding: 28px 20px;
+}
+
+.upload-drag-wrapper :deep(.el-upload__text) {
+  font-size: 14px;
+  color: #6b7a8f;
+}
+
+.upload-drag-wrapper :deep(.el-upload__tip) {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
 }
 </style>

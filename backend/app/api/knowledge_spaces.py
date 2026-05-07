@@ -228,7 +228,9 @@ def delete_knowledge_space(
     current_user: CurrentUser,
 ) -> dict:
     space = _get_space_or_404(db, current_user, space_id, action="manage")
-    if space.status != 0:
+    # 创建者删除自己的空空间时，允许直接删除（无需先停用）
+    is_owner = space.created_by == current_user.id
+    if not is_owner and space.status != 0:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="只能删除已停用的知识空间")
     has_documents = db.scalar(
         select(func.count()).select_from(Document).where(Document.space_id == space_id)

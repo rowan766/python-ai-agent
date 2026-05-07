@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 
@@ -17,6 +18,7 @@ from app.api.menus import router as menu_router
 from app.api.roles import router as role_router
 from app.api.uploads import router as upload_router
 from app.api.users import router as user_router
+from app.api.ws import router as ws_router, start_redis_subscriber
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.schema_sync import ensure_runtime_schema
@@ -82,7 +84,14 @@ async def lifespan(_app: FastAPI):
         print("Qdrant 状态: 已连接，可进行向量写入与检索")
     else:
         print("Qdrant 状态: 未连接，后端可正常运行，但向量检索暂不可用")
+
+    subscriber_task = asyncio.create_task(start_redis_subscriber())
     yield
+    subscriber_task.cancel()
+    try:
+        await subscriber_task
+    except asyncio.CancelledError:
+        pass
     get_ocr_engine.cache_clear()
 
 
@@ -210,3 +219,4 @@ app.include_router(dict_data_router)
 app.include_router(knowledge_space_router)
 app.include_router(upload_router)
 app.include_router(document_router)
+app.include_router(ws_router)

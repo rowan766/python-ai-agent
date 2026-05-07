@@ -5,7 +5,10 @@
       "Bash(grep -r \"cache\" backend/app/services/rag*.py backend/app/api/documents.py)",
       "Bash(.venv-fastapi311/Scripts/python.exe -c \"from app.services.llm_service import generate_general_answer; print\\('generate_general_answer 函数已加载'\\)\")",
       "Bash(.venv-fastapi311\\\\Scripts\\\\python.exe:*)",
-      "Bash(.venv-fastapi311Scriptspython.exe -c ' *)"
+      "Bash(.venv-fastapi311Scriptspython.exe -c ' *)",
+      "PowerShell(& \"D:\\\\study_python_20260404\\\\python-ai-agent\\\\backend\\\\.venv-fastapi311\\\\Scripts\\\\python.exe\" -c \"import docx; import openpyxl; import pptx; import xlrd; print\\('all ok'\\)\")",
+      "Bash(python3 *)",
+      "PowerShell(\\(\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\"\\).Length)"
     ]
   }
 }

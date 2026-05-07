@@ -6,6 +6,10 @@ import json
 import re
 from pathlib import Path
 
+import docx as python_docx
+import openpyxl
+import pptx as python_pptx
+import xlrd
 from pypdf import PdfReader
 from rapidocr_onnxruntime import RapidOCR
 from sqlalchemy import delete, select
@@ -13,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
+from app.core.redis_client import get_redis_client
 from app.models import Document, DocumentChunk, DocumentTask, FileRecord
 from app.services.document_queue import pop_document_task
 from app.services.object_storage import get_minio_object
@@ -22,6 +27,10 @@ from app.services.qdrant_vector_store import QdrantUnavailableError, delete_docu
 settings = get_settings()
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json", ".log", ".yaml", ".yml", ".xml", ".html", ".htm"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"}
+DOCX_EXTENSIONS = {".docx"}
+PPTX_EXTENSIONS = {".pptx"}
+EXCEL_XLSX_EXTENSIONS = {".xlsx"}
+EXCEL_XLS_EXTENSIONS = {".xls"}
 
 
 class DocumentProcessingError(Exception):
@@ -140,40 +149,127 @@ def _extract_text_from_pdf(data: bytes) -> str:
     return _normalize_text("\n\n".join(page_texts))
 
 
+def _extract_text_from_docx(data: bytes) -> str:
+    try:
+        doc = python_docx.Document(BytesIO(data))
+    except Exception as exc:
+        raise DocumentProcessingError(f"Word 文档格式无效或文件已损坏，无法解析：{exc}") from exc
+    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            try:
+                row_text = "\t".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+            except Exception:
+                continue
+            if row_text:
+                paragraphs.append(row_text)
+    return _normalize_text("\n\n".join(paragraphs))
+
+
+def _extract_text_from_xlsx(data: bytes) -> str:
+    wb = openpyxl.load_workbook(BytesIO(data), read_only=True, data_only=True)
+    lines: list[str] = []
+    for ws in wb.worksheets:
+        if ws.title:
+            lines.append(f"【{ws.title}】")
+        for row in ws.iter_rows(values_only=True):
+            row_text = "\t".join(str(cell) for cell in row if cell is not None and str(cell).strip())
+            if row_text.strip():
+                lines.append(row_text)
+    wb.close()
+    return _normalize_text("\n".join(lines))
+
+
+def _extract_text_from_xls(data: bytes) -> str:
+    wb = xlrd.open_workbook(file_contents=data)
+    lines: list[str] = []
+    for sheet in wb.sheets():
+        lines.append(f"【{sheet.name}】")
+        for row_idx in range(sheet.nrows):
+            row_text = "\t".join(
+                str(sheet.cell_value(row_idx, col_idx)).strip()
+                for col_idx in range(sheet.ncols)
+                if str(sheet.cell_value(row_idx, col_idx)).strip()
+            )
+            if row_text:
+                lines.append(row_text)
+    return _normalize_text("\n".join(lines))
+
+
+def _extract_text_from_pptx(data: bytes) -> str:
+    prs = python_pptx.Presentation(BytesIO(data))
+    slides: list[str] = []
+    for i, slide in enumerate(prs.slides, 1):
+        texts = []
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for para in shape.text_frame.paragraphs:
+                text = "".join(run.text for run in para.runs).strip()
+                if text:
+                    texts.append(text)
+        if texts:
+            slides.append(f"第{i}页\n" + "\n".join(texts))
+    return _normalize_text("\n\n".join(slides))
+
+
+def _publish_document_event(document_id: int, status: str, space_id: int | None = None, error_message: str | None = None) -> None:
+    try:
+        channel = f"{settings.redis_key_prefix}:events:document"
+        payload = json.dumps(
+            {"type": "document_status_changed", "documentId": document_id, "status": status, "spaceId": space_id, "errorMessage": error_message},
+            ensure_ascii=False,
+        )
+        get_redis_client().publish(channel, payload)
+    except Exception as exc:
+        print(f"[document_processor] publish event failed: {exc}")
+
+
 def extract_document_text(file_record: FileRecord) -> ExtractedDocumentText:
     extension = Path(file_record.original_name or file_record.file_name).suffix.lower()
     data = _read_object_bytes(file_record.file_name)
 
     if extension in TEXT_EXTENSIONS or file_record.mime_type.startswith("text/"):
-        return ExtractedDocumentText(
-            text=_normalize_text(_decode_bytes(data)),
-            parse_mode="text_direct",
-        )
+        return ExtractedDocumentText(text=_normalize_text(_decode_bytes(data)), parse_mode="text_direct")
 
     if extension == ".pdf" or file_record.mime_type == "application/pdf":
         extracted_text = _extract_text_from_pdf(data)
         if extracted_text:
-            return ExtractedDocumentText(
-                text=extracted_text,
-                parse_mode="pdf_text",
-            )
-
+            return ExtractedDocumentText(text=extracted_text, parse_mode="pdf_text")
         ocr_text = _extract_text_from_pdf_ocr(data)
         if ocr_text:
-            return ExtractedDocumentText(
-                text=ocr_text,
-                parse_mode="pdf_ocr_fallback",
-            )
+            return ExtractedDocumentText(text=ocr_text, parse_mode="pdf_ocr_fallback")
         raise DocumentProcessingError("PDF 未提取到可用文本，且 OCR 结果为空")
 
     if extension in IMAGE_EXTENSIONS or file_record.mime_type.startswith("image/"):
         extracted_text = _extract_text_from_ocr_bytes(data)
         if extracted_text:
-            return ExtractedDocumentText(
-                text=extracted_text,
-                parse_mode="image_ocr",
-            )
+            return ExtractedDocumentText(text=extracted_text, parse_mode="image_ocr")
         raise DocumentProcessingError("图片类文档 OCR 结果为空")
+
+    if extension in DOCX_EXTENSIONS:
+        text = _extract_text_from_docx(data)
+        if not text:
+            raise DocumentProcessingError("Word 文档内容为空")
+        return ExtractedDocumentText(text=text, parse_mode="docx_text")
+
+    if extension in EXCEL_XLSX_EXTENSIONS:
+        text = _extract_text_from_xlsx(data)
+        if not text:
+            raise DocumentProcessingError("Excel 文档内容为空")
+        return ExtractedDocumentText(text=text, parse_mode="excel_text")
+
+    if extension in EXCEL_XLS_EXTENSIONS:
+        text = _extract_text_from_xls(data)
+        if not text:
+            raise DocumentProcessingError("Excel(xls) 文档内容为空")
+        return ExtractedDocumentText(text=text, parse_mode="excel_text")
+
+    if extension in PPTX_EXTENSIONS:
+        text = _extract_text_from_pptx(data)
+        if not text:
+            raise DocumentProcessingError("PPT 文档未提取到文字内容")
+        return ExtractedDocumentText(text=text, parse_mode="pptx_text")
 
     raise DocumentProcessingError(f"暂不支持解析该文件类型：{extension or file_record.mime_type}")
 
@@ -320,6 +416,7 @@ def process_document_task(task_id: int) -> bool:
             document.error_message = None
             document.processed_at = finished_at
             db.commit()
+            _publish_document_event(document.id, "success", space_id=document.space_id)
             return True
         except Exception as exc:
             error_message = str(exc) or "文档处理失败"
@@ -335,6 +432,7 @@ def process_document_task(task_id: int) -> bool:
             document.error_message = error_message
             document.processed_at = finished_at
             db.commit()
+            _publish_document_event(document.id, "failed", space_id=document.space_id, error_message=error_message)
             return False
 
 

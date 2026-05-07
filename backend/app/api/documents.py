@@ -30,7 +30,7 @@ from app.schemas import (
     ReprocessDocumentData,
 )
 from app.services.document_permissions import build_document_permission_clause
-from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_task, get_document_queue_length
+from app.services.document_queue import DOCUMENT_QUEUE_NAME, enqueue_document_task
 from app.services.object_storage import remove_file_from_minio
 from app.services.rag_answer import answer_question_from_hits
 from app.services.rag_retrieval import retrieve_document_chunks
@@ -252,15 +252,19 @@ def get_document_task_list(
     response_model=ApiResponse[DocumentQueueStatusData],
 )
 def get_document_queue_status(db: DbSession, _current_user: CurrentUser) -> dict:
+    pending_count = (
+        db.scalar(select(func.count()).select_from(Document).where(Document.status == "pending"))
+        or 0
+    )
     processing_count = (
-        db.scalar(select(func.count()).select_from(DocumentTask).where(DocumentTask.status == "processing"))
+        db.scalar(select(func.count()).select_from(Document).where(Document.status == "processing"))
         or 0
     )
     return success_response(
         {
             "queueName": DOCUMENT_QUEUE_NAME,
             "processingMode": settings.document_processing_mode,
-            "pendingCount": get_document_queue_length(DOCUMENT_QUEUE_NAME),
+            "pendingCount": pending_count,
             "processingCount": processing_count,
         }
     )

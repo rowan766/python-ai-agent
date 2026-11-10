@@ -44,7 +44,10 @@ class Settings(BaseSettings):
     rag_answer_max_context_chars: int = 2400
     llm_provider: str = "dashscope"
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    llm_api_key: str | None = Field(default=None, validation_alias=AliasChoices("LLM_API_KEY", "DASHSCOPE_API_KEY"))
+    llm_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LLM_API_KEY", "DASHSCOPE_API_KEY", "DEEPSEEK_API_KEY"),
+    )
     llm_model_name: str = "qwen-plus"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 900

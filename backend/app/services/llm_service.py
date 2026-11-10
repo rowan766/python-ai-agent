@@ -38,9 +38,9 @@ def _normalize_text(value: Any) -> str:
 @lru_cache
 def get_llm_client() -> OpenAI:
     if not settings.llm_enabled:
-        raise LlmUnavailableError("未配置 LLM_API_KEY 或 DASHSCOPE_API_KEY")
+        raise LlmUnavailableError("未配置 LLM_API_KEY、DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY")
     provider = settings.llm_provider.strip().lower()
-    if provider != "dashscope":
+    if provider not in {"dashscope", "deepseek"}:
         raise LlmUnavailableError(f"暂不支持的 LLM Provider: {settings.llm_provider}")
     logger.info(
         "初始化 LLM 客户端: provider=%s base_url=%s model=%s",
